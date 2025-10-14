@@ -275,7 +275,7 @@ const btn: React.CSSProperties = {
   height: 30,
   padding: "0 12px",
   borderRadius: 8,
-  border: "1px solid "#ddd",
+  border: "1px solid #ddd",
   background: "#f8f8f8",
   color: "#111",
   cursor: "pointer",
