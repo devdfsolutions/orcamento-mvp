@@ -1,14 +1,14 @@
+// ✅ bloco único de config no topo
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
-export const runtime = "nodejs";
-import React from 'react';
-import { prisma } from '@/lib/prisma';
-import { getSupabaseServer } from '@/lib/supabaseServer';
-import { redirect } from 'next/navigation';
-import { upsertVinculo, excluirVinculo } from '@/actions/vinculos';
-import InlineVinculoRow from '@/components/InlineVinculoRow';
 
-export const dynamic = 'force-dynamic';
+import { prisma } from "@/lib/prisma";
+// Se precisar de import dinâmico do Next:
+import NextDynamic from "next/dynamic"; // <- renomeado
+
+export default async function Page() {
+  const itens = await prisma.algumaTabela.findMany();
 
 /* ===== helpers ===== */
 function moneyShort(v: any) {
