@@ -1,6 +1,6 @@
 // app/(app)/layout.tsx
-import Topbar from "../_topbar"; // ajuste se o caminho for diferente
-// import Sidebar from "../_sidebar"; // se existir
+import Topbar from "../_topbar"; // ajuste o caminho se necessário
+// import Sidebar from "../_sidebar"; // se você tiver um
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -11,7 +11,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-[#f7f7f8]">
       <Topbar />
       <div className="flex">
-        {/* {Sidebar ? <Sidebar /> : null} */}
+        {/* <Sidebar /> */}
         <main className="flex-1">{children}</main>
       </div>
     </div>
