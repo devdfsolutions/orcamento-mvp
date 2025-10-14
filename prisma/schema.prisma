@@ -1,0 +1,235 @@
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/**
+ * =========================
+ * ENUMS
+ * =========================
+ */
+
+enum TipoItem {
+  PRODUTO
+  SERVICO
+  AMBOS
+}
+
+enum FontePrecoMaterial {
+  P1
+  P2
+  P3
+}
+
+enum FontePrecoMO {
+  M1
+  M2
+  M3
+}
+
+enum Role {
+  ADM
+  USER
+}
+
+/**
+ * =========================
+ * CADASTROS
+ * =========================
+ */
+
+model UnidadeMedida {
+  id       Int              @id @default(autoincrement())
+  sigla    String           @unique
+  nome     String
+  produtos ProdutoServico[]
+  itens    EstimativaItem[] // UM sugerida/override por item
+}
+
+model ProdutoServico {
+  id              Int                 @id @default(autoincrement())
+  nome            String
+  categoria       String? // opcional
+  unidadeMedidaId Int
+  unidade         UnidadeMedida       @relation(fields: [unidadeMedidaId], references: [id])
+  fornecedores    FornecedorProduto[]
+  itens           EstimativaItem[]
+
+  // Tipo do item (Produto, Serviço ou Ambos)
+  tipo TipoItem @default(AMBOS)
+
+  // Preços de referência opcionais
+  refPrecoP1 Decimal? @db.Decimal(12, 2)
+  refPrecoP2 Decimal? @db.Decimal(12, 2)
+  refPrecoP3 Decimal? @db.Decimal(12, 2)
+
+  @@index([nome])
+}
+
+model Fornecedor {
+  id      Int     @id @default(autoincrement())
+  nome    String
+  cnpjCpf String
+  contato String?
+
+  produtos FornecedorProduto[]
+  itens    EstimativaItem[]    @relation("FornecedorItens")
+
+  @@index([nome])
+  @@index([cnpjCpf])
+}
+
+model FornecedorProduto {
+  id Int @id @default(autoincrement())
+
+  fornecedorId Int
+  produtoId    Int
+
+  fornecedor Fornecedor     @relation(fields: [fornecedorId], references: [id], onDelete: Cascade)
+  produto    ProdutoServico @relation(fields: [produtoId], references: [id], onDelete: Cascade)
+
+  // 3 preços Materiais
+  precoMatP1 Decimal? @db.Decimal(12, 2)
+  precoMatP2 Decimal? @db.Decimal(12, 2)
+  precoMatP3 Decimal? @db.Decimal(12, 2)
+
+  // 3 preços Mão de Obra
+  precoMoM1 Decimal? @db.Decimal(12, 2)
+  precoMoM2 Decimal? @db.Decimal(12, 2)
+  precoMoM3 Decimal? @db.Decimal(12, 2)
+
+  dataUltAtual DateTime
+  observacao   String?
+
+  @@unique([fornecedorId, produtoId])
+  @@index([fornecedorId])
+  @@index([produtoId])
+}
+
+model ClienteUsuario {
+  id        Int     @id @default(autoincrement())
+  usuarioId Int
+  usuario   Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  nome     String
+  cpf      String? @unique
+  cnpj     String? @unique
+  email    String? @unique
+  telefone String?
+  endereco String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  projetos Projeto[]
+
+  @@index([usuarioId, nome])
+  @@index([cpf])
+  @@index([cnpj])
+  @@index([email])
+}
+
+/**
+ * =========================
+ * PROJETOS & ESTIMATIVAS
+ * =========================
+ */
+
+model Projeto {
+  id     Int    @id @default(autoincrement())
+  nome   String
+  status String @default("rascunho") // rascunho | com_estimativa | aprovado | execucao | concluido
+
+  clienteId Int?
+  cliente   ClienteUsuario? @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+
+  estimativas Estimativa[]
+  resumo      ResumoProjeto?
+
+  @@index([status])
+  @@index([clienteId])
+}
+
+model Estimativa {
+  id        Int     @id @default(autoincrement())
+  projetoId Int
+  projeto   Projeto @relation(fields: [projetoId], references: [id], onDelete: Cascade)
+
+  nome     String   @default("Estimativa")
+  criadaEm DateTime @default(now())
+  aprovada Boolean  @default(false)
+
+  itens EstimativaItem[]
+
+  @@index([projetoId])
+}
+
+model EstimativaItem {
+  id Int @id @default(autoincrement())
+
+  estimativaId Int
+  estimativa   Estimativa @relation(fields: [estimativaId], references: [id], onDelete: Cascade)
+
+  produtoId Int
+  produto   ProdutoServico @relation(fields: [produtoId], references: [id])
+
+  quantidade Decimal @db.Decimal(12, 3)
+
+  unidadeId Int
+  unidade   UnidadeMedida @relation(fields: [unidadeId], references: [id])
+
+  fornecedorId Int
+  fornecedor   Fornecedor @relation("FornecedorItens", fields: [fornecedorId], references: [id])
+
+  fontePrecoMat FontePrecoMaterial?
+  fontePrecoMo  FontePrecoMO?
+
+  valorUnitMat Decimal? @db.Decimal(12, 2)
+  valorUnitMo  Decimal? @db.Decimal(12, 2)
+
+  totalItem Decimal? @db.Decimal(12, 2)
+
+  @@index([estimativaId])
+  @@index([produtoId])
+  @@index([unidadeId])
+  @@index([fornecedorId])
+}
+
+/**
+ * =========================
+ * RESUMO FINANCEIRO
+ * =========================
+ */
+
+model ResumoProjeto {
+  projetoId   Int     @id
+  projeto     Projeto @relation(fields: [projetoId], references: [id], onDelete: Cascade)
+  recebemos   Decimal @db.Decimal(14, 2)
+  observacoes String?
+}
+
+/**
+ * =========================
+ * USUÁRIOS
+ * =========================
+ */
+
+model Usuario {
+  id             Int     @id @default(autoincrement())
+  supabaseUserId String  @unique
+  nome           String
+  cpf            String? @unique
+  email          String  @unique
+  telefone       String?
+  cnpj           String?
+  role           Role    @default(USER)
+
+  clientes ClienteUsuario[]
+
+  @@index([email])
+}

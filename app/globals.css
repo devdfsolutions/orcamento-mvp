@@ -1,0 +1,15 @@
+/* app/globals.css */
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+               Arial, "Noto Sans", "Liberation Sans", "Apple Color Emoji", "Segoe UI Emoji";
+  background: #fafafa;
+  color: #111;
+}
+
+table { border-collapse: collapse; }
+a { color: inherit; text-decoration: none; }
+button { font: inherit; }
+input, button { outline: none; }
