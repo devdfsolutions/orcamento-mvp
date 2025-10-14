@@ -1,252 +1,210 @@
-// ✅ bloco único de config no topo
+// ===== Config de runtime (uma única vez, no topo) =====
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 import { prisma } from "@/lib/prisma";
-// Se precisar de import dinâmico do Next:
-import NextDynamic from "next/dynamic"; // <- renomeado
-
-export default async function Page() {
-  const itens = await prisma.algumaTabela.findMany();
+import { getSupabaseServer } from "@/lib/supabaseServer";
+import { redirect } from "next/navigation";
+import InlineVinculoRow from "@/components/InlineVinculoRow";
+import { upsertVinculo, excluirVinculo } from "@/actions/vinculos";
 
 /* ===== helpers ===== */
-function moneyShort(v: any) {
-  if (v == null) return '—';
+function money(v: any) {
   const n = Number(v);
-  if (!Number.isFinite(n)) return '—';
-  return n.toLocaleString('pt-BR', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  if (!Number.isFinite(n)) return "—";
+  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
-function dateBR(d: Date | string | null | undefined) {
-  if (!d) return '—';
-  const x = new Date(d);
-  if (isNaN(x.getTime())) return '—';
-  const dd = String(x.getDate()).padStart(2, '0');
-  const mm = String(x.getMonth() + 1).padStart(2, '0');
-  const yyyy = String(x.getFullYear());
-  return `${dd}/${mm}/${yyyy}`;
+const tipoLabel = (t?: string | null) =>
+  t === "PRODUTO" ? "Produto" : t === "SERVICO" ? "Serviço" : "Ambos";
+
+type VincForn = {
+  produtoId: number;
+  fornecedorNome: string;
+  // Materiais
+  precoMatP1: number | null;
+  precoMatP2: number | null;
+  precoMatP3: number | null;
+  // Mão de obra
+  precoMoM1: number | null;
+  precoMoM2: number | null;
+  precoMoM3: number | null;
+};
+
+/** Pega min/max de acordo com o tipo do produto:
+ * - PRODUTO / AMBOS -> usa materiais (P1..P3)
+ * - SERVICO         -> usa mão de obra (M1..M3)
+ */
+function pickMinMaxByTipo(
+  vincs: VincForn[],
+  tipo: "PRODUTO" | "SERVICO" | "AMBOS" | null | undefined
+) {
+  let min: { preco: number; fornecedor: string } | undefined;
+  let max: { preco: number; fornecedor: string } | undefined;
+
+  const useMO = tipo === "SERVICO";
+  for (const v of vincs) {
+    const cand = useMO
+      ? [v.precoMoM1, v.precoMoM2, v.precoMoM3]
+      : [v.precoMatP1, v.precoMatP2, v.precoMatP3];
+
+    for (const p of cand) {
+      const price = Number(p);
+      if (!Number.isFinite(price)) continue;
+      if (!min || price < min.preco) min = { preco: price, fornecedor: v.fornecedorNome };
+      if (!max || price > max.preco) max = { preco: price, fornecedor: v.fornecedorNome };
+    }
+  }
+  return { min, max };
 }
 
+/* ===== page ===== */
 export default async function Page() {
-  // auth
-  const supabase = await getSupabaseServer();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
+  // Auth
+  const supabase = getSupabaseServer();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
 
-  const [fornecedores, produtos, vinculos] = await Promise.all([
-    prisma.fornecedor.findMany({
-      orderBy: { nome: 'asc' },
-      select: { id: true, nome: true },
+  const [unidades, produtos] = await Promise.all([
+    prisma.unidadeMedida.findMany({
+      orderBy: { sigla: "asc" },
+      select: { id: true, sigla: true, nome: true },
     }),
     prisma.produtoServico.findMany({
-      orderBy: { nome: 'asc' },
+      orderBy: [{ nome: "asc" }],
       select: {
         id: true,
         nome: true,
-        unidade: { select: { sigla: true } },
-      },
-    }),
-    prisma.fornecedorProduto.findMany({
-      orderBy: [
-        { fornecedor: { nome: 'asc' } },
-        { produto: { nome: 'asc' } },
-      ],
-      include: {
-        fornecedor: { select: { id: true, nome: true } },
-        produto: {
-          select: {
-            id: true,
-            nome: true,
-            unidade: { select: { sigla: true } },
-          },
-        },
+        categoria: true,
+        tipo: true,
+        unidadeMedidaId: true,
+        unidade: { select: { id: true, sigla: true, nome: true } },
       },
     }),
   ]);
 
+  // vínculos (Fornecedor ↔ Produto)
+  const vinculos = await prisma.fornecedorProduto.findMany({
+    include: { fornecedor: { select: { nome: true } } },
+  });
+
+  const mapPorProduto = new Map<number, VincForn[]>();
+  for (const v of vinculos) {
+    const arr = mapPorProduto.get(v.produtoId) ?? [];
+    arr.push({
+      produtoId: v.produtoId,
+      fornecedorNome: v.fornecedor.nome,
+      precoMatP1: v.precoMatP1 == null ? null : Number(v.precoMatP1),
+      precoMatP2: v.precoMatP2 == null ? null : Number(v.precoMatP2),
+      precoMatP3: v.precoMatP3 == null ? null : Number(v.precoMatP3),
+      precoMoM1: v.precoMoM1 == null ? null : Number(v.precoMoM1),
+      precoMoM2: v.precoMoM2 == null ? null : Number(v.precoMoM2),
+      precoMoM3: v.precoMoM3 == null ? null : Number(v.precoMoM3),
+    });
+    mapPorProduto.set(v.produtoId, arr);
+  }
+
   return (
-    <main style={{ padding: 24, display: 'grid', gap: 16, maxWidth: 1400 }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700 }}>
-        Cadastros / Vínculos Fornecedor ↔ Produto
-      </h1>
+    <main style={{ padding: 24, display: "grid", gap: 16, maxWidth: 1200 }}>
+      <h1 style={{ fontSize: 22, fontWeight: 700 }}>Cadastros / Produtos & Serviços</h1>
 
-      {/* Novo/Atualizar vínculo (upsert) */}
+      {/* criar (sem preços) */}
       <section style={card}>
-        <h2 style={h2}>Criar/Atualizar vínculo (upsert)</h2>
+        <h2 style={h2}>Novo produto/serviço</h2>
+
         <form
-          action={upsertVinculo}
-          style={{
-            display: 'grid',
-            gap: 8,
-            gridTemplateColumns: '1fr 1fr 1fr 1fr',
-          }}
+          action={"/api/ignore"} // apenas placeholder; sua criação de produto está em outra page
+          style={{ display: "grid", gap: 8, gridTemplateColumns: "1fr 140px 160px 1fr" }}
         >
-          <select
-            name="fornecedorId"
-            defaultValue=""
-            required
-            style={{ ...input, height: 36 }}
-          >
+          <input name="nome" placeholder="Nome" required style={input} />
+
+          <select name="tipo" defaultValue="AMBOS" required style={{ ...input, height: 36 }}>
+            <option value="PRODUTO">Produto</option>
+            <option value="SERVICO">Serviço</option>
+            <option value="AMBOS">Ambos</option>
+          </select>
+
+          <select name="unidadeMedidaId" defaultValue="" required style={{ ...input, height: 36 }}>
             <option value="" disabled>
-              Fornecedor
+              Selecione UM
             </option>
-            {fornecedores.map((f) => (
-              <option key={f.id} value={f.id}>
-                {f.nome}
+            {unidades.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.sigla} — {u.nome}
               </option>
             ))}
           </select>
 
-          <select
-            name="produtoId"
-            defaultValue=""
-            required
-            style={{ ...input, height: 36 }}
-          >
-            <option value="" disabled>
-              Produto/Serviço
-            </option>
-            {produtos.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.nome} {p.unidade?.sigla ? `(${p.unidade.sigla})` : ''}
-              </option>
-            ))}
-          </select>
+          <input name="categoria" placeholder="Categoria (opcional)" style={input} />
 
-          <input
-            name="dataUltAtual"
-            placeholder="Data (DD/MM/AAAA)"
-            style={input}
-          />
-          <input
-            name="observacao"
-            placeholder="Observação (opcional)"
-            style={input}
-          />
-
-          {/* Materiais P1/P2/P3 */}
-          <input
-            name="precoMatP1"
-            placeholder="Materiais P1 (R$)"
-            inputMode="decimal"
-            style={input}
-          />
-          <input
-            name="precoMatP2"
-            placeholder="Materiais P2 (R$)"
-            inputMode="decimal"
-            style={input}
-          />
-          <input
-            name="precoMatP3"
-            placeholder="Materiais P3 (R$)"
-            inputMode="decimal"
-            style={input}
-          />
-
-          {/* Mão de obra M1/M2/M3 */}
-          <input
-            name="precoMoM1"
-            placeholder="Mão de Obra M1 (R$)"
-            inputMode="decimal"
-            style={input}
-          />
-          <input
-            name="precoMoM2"
-            placeholder="Mão de Obra M2 (R$)"
-            inputMode="decimal"
-            style={input}
-          />
-          <input
-            name="precoMoM3"
-            placeholder="Mão de Obra M3 (R$)"
-            inputMode="decimal"
-            style={input}
-          />
-
-          <div
-            style={{
-              gridColumn: '1 / span 4',
-              display: 'flex',
-              justifyContent: 'flex-end',
-            }}
-          >
-            <button type="submit" style={btn}>
-              Salvar
+          <div style={{ gridColumn: "1 / span 4", display: "flex", justifyContent: "flex-end" }}>
+            <button type="submit" style={btn} disabled>
+              Salvar (exemplo)
             </button>
           </div>
         </form>
-        <p style={{ marginTop: 6, fontSize: 12, color: '#666' }}>
-          Dica: selecione o mesmo fornecedor+produto e preencha novos valores
-          para atualizar (upsert).
-        </p>
       </section>
 
-      {/* Lista */}
+      {/* lista de vínculos com edição inline */}
       <section>
         <table
           style={{
-            width: '100%',
-            borderCollapse: 'collapse',
-            background: '#fff',
-            tableLayout: 'fixed',
+            width: "100%",
+            borderCollapse: "collapse",
+            background: "#fff",
+            tableLayout: "fixed",
           }}
         >
           <colgroup>
-            <col style={{ width: '20%' }} /> {/* Fornecedor */}
-            <col style={{ width: '25%' }} /> {/* Produto/Serviço */}
-            <col style={{ width: '10%' }} /> {/* UM */}
-            <col style={{ width: 70 }} /> {/* P1 */}
-            <col style={{ width: 70 }} /> {/* P2 */}
-            <col style={{ width: 70 }} /> {/* P3 */}
-            <col style={{ width: 70 }} /> {/* M1 */}
-            <col style={{ width: 70 }} /> {/* M2 */}
-            <col style={{ width: 70 }} /> {/* M3 */}
-            <col style={{ width: '20%' }} /> {/* Atualização */}
-            <col style={{ width: '15%' }} /> {/* Obs */}
-            <col style={{ width: '12%' }} /> {/* Ações */}
+            <col style={{ width: "20%" }} />
+            <col style={{ width: "25%" }} />
+            <col style={{ width: "10%" }} />
+            <col style={{ width: 70 }} />
+            <col style={{ width: 70 }} />
+            <col style={{ width: 70 }} />
+            <col style={{ width: 70 }} />
+            <col style={{ width: 70 }} />
+            <col style={{ width: 70 }} />
+            <col style={{ width: "20%" }} />
+            <col style={{ width: "15%" }} />
+            <col style={{ width: "12%" }} />
           </colgroup>
           <thead>
             <tr>
               <th style={th}>Fornecedor</th>
               <th style={th}>Produto/Serviço</th>
-              <th style={{ ...th, textAlign: 'center' }}>UM</th>
-              <th style={{ ...th, textAlign: 'right' }}>P1</th>
-              <th style={{ ...th, textAlign: 'right' }}>P2</th>
-              <th style={{ ...th, textAlign: 'right' }}>P3</th>
-              <th style={{ ...th, textAlign: 'right' }}>M1</th>
-              <th style={{ ...th, textAlign: 'right' }}>M2</th>
-              <th style={{ ...th, textAlign: 'right' }}>M3</th>
+              <th style={{ ...th, textAlign: "center" }}>UM</th>
+              <th style={{ ...th, textAlign: "right" }}>P1</th>
+              <th style={{ ...th, textAlign: "right" }}>P2</th>
+              <th style={{ ...th, textAlign: "right" }}>P3</th>
+              <th style={{ ...th, textAlign: "right" }}>M1</th>
+              <th style={{ ...th, textAlign: "right" }}>M2</th>
+              <th style={{ ...th, textAlign: "right" }}>M3</th>
               <th style={th}>Atualização</th>
               <th style={th}>Obs</th>
               <th style={th}></th>
             </tr>
           </thead>
           <tbody>
-          {vinculos.map(v => {
-          const safeV = {
-                           ...v,
-      precoMatP1: v.precoMatP1 ? Number(v.precoMatP1) : null,
-      precoMatP2: v.precoMatP2 ? Number(v.precoMatP2) : null,
-      precoMatP3: v.precoMatP3 ? Number(v.precoMatP3) : null,
-      precoMoM1:  v.precoMoM1  ? Number(v.precoMoM1)  : null,
-      precoMoM2:  v.precoMoM2  ? Number(v.precoMoM2)  : null,
-      precoMoM3:  v.precoMoM3  ? Number(v.precoMoM3)  : null,
-     };
-      return (
-    <InlineVinculoRow
-      key={v.id}
-      v={safeV}
-      onSubmit={upsertVinculo}
-      onDelete={excluirVinculo}
-    />
-  );
-})}
+            {vinculos.map((v) => {
+              const safeV = {
+                ...v,
+                precoMatP1: v.precoMatP1 ? Number(v.precoMatP1) : null,
+                precoMatP2: v.precoMatP2 ? Number(v.precoMatP2) : null,
+                precoMatP3: v.precoMatP3 ? Number(v.precoMatP3) : null,
+                precoMoM1: v.precoMoM1 ? Number(v.precoMoM1) : null,
+                precoMoM2: v.precoMoM2 ? Number(v.precoMoM2) : null,
+                precoMoM3: v.precoMoM3 ? Number(v.precoMoM3) : null,
+              };
+              return (
+                <InlineVinculoRow
+                  key={v.id}
+                  v={safeV}
+                  onSubmit={upsertVinculo}
+                  onDelete={excluirVinculo}
+                />
+              );
+            })}
 
             {vinculos.length === 0 && (
               <tr>
@@ -265,41 +223,41 @@ export default async function Page() {
 /* estilos inline */
 const card: React.CSSProperties = {
   padding: 12,
-  border: '1px solid #eee',
+  border: "1px solid #eee",
   borderRadius: 8,
-  background: '#fff',
+  background: "#fff",
 };
-const h2: React.CSSProperties = { fontSize: 16, margin: '0 0 10px' };
+const h2: React.CSSProperties = { fontSize: 16, margin: "0 0 10px" };
 const th: React.CSSProperties = {
-  textAlign: 'left',
+  textAlign: "left",
   padding: 10,
-  borderBottom: '1px solid #eee',
-  background: '#fafafa',
+  borderBottom: "1px solid #eee",
+  background: "#fafafa",
   fontWeight: 600,
-  whiteSpace: 'normal',
+  whiteSpace: "normal",
 };
 const td: React.CSSProperties = {
   padding: 10,
-  borderBottom: '1px solid #f2f2f2',
-  verticalAlign: 'top',
-  wordBreak: 'break-word',
-  overflowWrap: 'anywhere',
+  borderBottom: "1px solid #f2f2f2",
+  verticalAlign: "top",
+  wordBreak: "break-word",
+  overflowWrap: "anywhere",
 };
 const input: React.CSSProperties = {
   height: 36,
-  padding: '0 10px',
-  border: '1px solid #ddd',
+  padding: "0 10px",
+  border: "1px solid #ddd",
   borderRadius: 8,
-  outline: 'none',
-  width: '100%',
-  boxSizing: 'border-box',
+  outline: "none",
+  width: "100%",
+  boxSizing: "border-box",
 };
 const btn: React.CSSProperties = {
   height: 36,
-  padding: '0 14px',
+  padding: "0 14px",
   borderRadius: 8,
-  border: '1px solid #ddd',
-  background: '#111',
-  color: '#fff',
-  cursor: 'pointer',
+  border: "1px solid #ddd",
+  background: "#111",
+  color: "#fff",
+  cursor: "pointer",
 };
