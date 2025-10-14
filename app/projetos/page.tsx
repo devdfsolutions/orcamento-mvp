@@ -1,4 +1,7 @@
 // app/projetos/page.tsx
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const runtime = "nodejs";
 import ConfirmSubmit from '@/components/ConfirmSubmit';
 import { prisma } from '@/lib/prisma';
 import { getSupabaseServer } from '@/lib/supabaseServer';
