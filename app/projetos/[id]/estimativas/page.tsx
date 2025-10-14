@@ -1,4 +1,7 @@
 // app/projetos/[id]/estimativas/page.tsx
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const runtime = "nodejs";
 import { prisma } from '@/lib/prisma';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { redirect } from 'next/navigation';
