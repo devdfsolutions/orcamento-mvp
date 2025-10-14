@@ -1,26 +1,26 @@
-import { cookies } from 'next/headers';
-import { createServerClient } from '@supabase/ssr';
+// src/lib/supabaseServer.ts
+import { cookies } from "next/headers";
+import { createServerClient } from "@supabase/ssr";
 
-/**
- * Server Components (Next 15): cookies() é async e é read-only aqui.
- * Para ler sessão (auth.getSession) basta implementar get/set/remove,
- * mesmo que set/remove sejam no-ops (sem efeito) nesse contexto.
- */
-export async function getSupabaseServer() {
-  const cookieStore = await cookies();
+export function getSupabaseServer() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value;
-        },
-        // no-ops em Server Components
-        set(_name: string, _value: string, _options?: any) {},
-        remove(_name: string, _options?: any) {},
+  if (!url || !key) {
+    // Não deixe quebrar na importação; só quando a função for chamada.
+    throw new Error("Missing Supabase env: defina NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY");
+  }
+
+  const cookieStore = cookies();
+
+  return createServerClient(url, key, {
+    cookies: {
+      get(name: string) {
+        return cookieStore.get(name)?.value;
       },
-    }
-  );
+      // Para SSR puro, podemos no-op set/remove
+      set() {},
+      remove() {},
+    },
+  });
 }
