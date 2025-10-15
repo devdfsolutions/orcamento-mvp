@@ -1,5 +1,6 @@
 "use client";
-import { useState, useEffect } from "react";
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
 
@@ -16,55 +17,104 @@ export default function Topbar() {
       .catch(() => setMe(null));
   }, []);
 
+  const headerStyle: React.CSSProperties = {
+    position: "sticky",
+    top: 0,
+    zIndex: 30,
+    background: "#fff",
+    borderBottom: "1px solid #eee",
+    padding: "8px 16px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    height: 56,
+  };
+
+  const btnStyle: React.CSSProperties = {
+    padding: "8px 10px",
+    border: "1px solid #ddd",
+    borderRadius: 8,
+    background: "#fff",
+    cursor: "pointer",
+  };
+
+  const linkBtn: React.CSSProperties = {
+    padding: "8px 12px",
+    border: "1px solid #ddd",
+    borderRadius: 8,
+    background: "#fff",
+    textDecoration: "none",
+    color: "#111",
+    display: "inline-block",
+  };
+
+  const overlayStyle: React.CSSProperties = {
+    position: "fixed",
+    inset: 0 as any,
+    background: "rgba(0,0,0,0.4)",
+    zIndex: 20,
+    display: open ? "block" : "none",
+  };
+
+  const asideStyle: React.CSSProperties = {
+    position: "fixed",
+    top: 0,
+    left: 0,
+    height: "100vh",
+    width: 260,
+    background: "#fff",
+    borderRight: "1px solid #eee",
+    boxShadow: "0 6px 24px rgba(0,0,0,0.12)",
+    zIndex: 30,
+    transform: open ? "translateX(0)" : "translateX(-100%)",
+    transition: "transform .25s ease",
+    display: "flex",
+    flexDirection: "column",
+  };
+
+  const asideHeader: React.CSSProperties = {
+    padding: 16,
+    borderBottom: "1px solid #eee",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+  };
+
+  const menuLink: React.CSSProperties = {
+    padding: "10px 14px",
+    textDecoration: "none",
+    color: "#111",
+    borderRadius: 8,
+  };
+
+  const navWrap: React.CSSProperties = { padding: 12, display: "grid", gap: 6 };
+
   return (
     <>
-      {/* Barra superior */}
-      <header className="flex items-center justify-between bg-white border-b border-gray-200 px-5 py-3 sticky top-0 z-30 shadow-sm">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setOpen(true)}
-            className="p-2 border rounded-md hover:bg-gray-100 transition"
-          >
+      {/* Topbar */}
+      <header style={headerStyle}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <button style={btnStyle} onClick={() => setOpen(true)} aria-label="Abrir menu">
             ☰
           </button>
-          <Link href="/" className="font-bold text-gray-900 text-lg">
+          <Link href="/" style={{ textDecoration: "none", color: "#111", fontWeight: 700 }}>
             Gerador de Projetos
           </Link>
         </div>
 
-        <div className="flex items-center gap-2">
-          <Link
-            href="/projetos"
-            className="px-3 py-1.5 text-sm border rounded-md hover:bg-gray-100"
-          >
-            Projetos
-          </Link>
-
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <Link href="/projetos" style={linkBtn}>Projetos</Link>
           {me?.role === "ADM" && (
-            <Link
-              href="/admin/usuarios"
-              className="px-3 py-1.5 text-sm border rounded-md hover:bg-gray-100"
-            >
-              Admin
-            </Link>
+            <Link href="/admin/usuarios" style={linkBtn}>Admin</Link>
           )}
-
-          {!me && (
-            <Link
-              href="/login"
-              className="px-3 py-1.5 text-sm border rounded-md hover:bg-gray-100"
-            >
-              Entrar
-            </Link>
-          )}
-
+          {!me && <Link href="/login" style={linkBtn}>Entrar</Link>}
           {me && (
             <button
+              style={btnStyle}
               onClick={async () => {
                 await supabase.auth.signOut();
                 location.href = "/login";
               }}
-              className="px-3 py-1.5 text-sm border rounded-md hover:bg-gray-100"
             >
               Sair
             </button>
@@ -72,73 +122,25 @@ export default function Topbar() {
         </div>
       </header>
 
-      {/* Overlay escuro */}
-      {open && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-40 z-20 transition-opacity duration-300"
-          onClick={() => setOpen(false)}
-        ></div>
-      )}
+      {/* Overlay */}
+      <div style={overlayStyle} onClick={() => setOpen(false)} />
 
-      {/* Menu lateral */}
-      <aside
-        className={`fixed top-0 left-0 h-full w-64 bg-white border-r border-gray-200 shadow-lg transform transition-all duration-300 z-30 ${
-          open ? "translate-x-0" : "-translate-x-full"
-        }`}
-      >
-        <div className="flex justify-between items-center p-4 border-b">
-          <h2 className="font-semibold text-lg">Menu</h2>
-          <button
-            onClick={() => setOpen(false)}
-            className="p-2 rounded-md hover:bg-gray-100 text-gray-700"
-          >
+      {/* Sidebar */}
+      <aside style={asideStyle} aria-hidden={!open}>
+        <div style={asideHeader}>
+          <div style={{ fontWeight: 600 }}>Menu</div>
+          <button style={btnStyle} onClick={() => setOpen(false)} aria-label="Fechar menu">
             ✕
           </button>
         </div>
 
-        <nav className="flex flex-col p-4 space-y-2">
-          <Link
-            href="/projetos"
-            className="hover:bg-gray-100 rounded-md px-3 py-2 flex items-center gap-2"
-            onClick={() => setOpen(false)}
-          >
-            📁 Projetos
-          </Link>
-          <Link
-            href="/cadastros/clientes"
-            className="hover:bg-gray-100 rounded-md px-3 py-2 flex items-center gap-2"
-            onClick={() => setOpen(false)}
-          >
-            👤 Clientes
-          </Link>
-          <Link
-            href="/cadastros/produtos"
-            className="hover:bg-gray-100 rounded-md px-3 py-2 flex items-center gap-2"
-            onClick={() => setOpen(false)}
-          >
-            🧱 Produtos & Serviços
-          </Link>
-          <Link
-            href="/cadastros/fornecedores"
-            className="hover:bg-gray-100 rounded-md px-3 py-2 flex items-center gap-2"
-            onClick={() => setOpen(false)}
-          >
-            🚚 Fornecedores
-          </Link>
-          <Link
-            href="/cadastros/unidades"
-            className="hover:bg-gray-100 rounded-md px-3 py-2 flex items-center gap-2"
-            onClick={() => setOpen(false)}
-          >
-            ⚙️ Unidades
-          </Link>
-          <Link
-            href="/cadastros/vinculos"
-            className="hover:bg-gray-100 rounded-md px-3 py-2 flex items-center gap-2"
-            onClick={() => setOpen(false)}
-          >
-            🔗 Vínculos
-          </Link>
+        <nav style={navWrap}>
+          <Link href="/projetos" style={menuLink} onClick={() => setOpen(false)}>📁 Projetos</Link>
+          <Link href="/cadastros/clientes" style={menuLink} onClick={() => setOpen(false)}>👤 Clientes</Link>
+          <Link href="/cadastros/produtos" style={menuLink} onClick={() => setOpen(false)}>🧱 Produtos & Serviços</Link>
+          <Link href="/cadastros/fornecedores" style={menuLink} onClick={() => setOpen(false)}>🚚 Fornecedores</Link>
+          <Link href="/cadastros/unidades" style={menuLink} onClick={() => setOpen(false)}>⚙️ Unidades</Link>
+          <Link href="/cadastros/vinculos" style={menuLink} onClick={() => setOpen(false)}>🔗 Vínculos</Link>
         </nav>
       </aside>
     </>
