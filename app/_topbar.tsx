@@ -33,7 +33,10 @@ export default function Topbar() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Link href="/projetos" className="px-3 py-1.5 text-sm border rounded-md hover:bg-gray-100">
+          <Link
+            href="/projetos"
+            className="px-3 py-1.5 text-sm border rounded-md hover:bg-gray-100"
+          >
             Projetos
           </Link>
 
@@ -47,7 +50,10 @@ export default function Topbar() {
           )}
 
           {!me && (
-            <Link href="/login" className="px-3 py-1.5 text-sm border rounded-md hover:bg-gray-100">
+            <Link
+              href="/login"
+              className="px-3 py-1.5 text-sm border rounded-md hover:bg-gray-100"
+            >
               Entrar
             </Link>
           )}
@@ -66,17 +72,17 @@ export default function Topbar() {
         </div>
       </header>
 
-      {/* Overlay escuro de fundo */}
+      {/* Overlay escuro */}
       {open && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-40 z-20"
+          className="fixed inset-0 bg-black bg-opacity-40 z-20 transition-opacity duration-300"
           onClick={() => setOpen(false)}
         ></div>
       )}
 
       {/* Menu lateral */}
       <aside
-        className={`fixed top-0 left-0 h-full w-64 bg-white border-r border-gray-200 shadow-lg transform transition-transform duration-300 z-30 ${
+        className={`fixed top-0 left-0 h-full w-64 bg-white border-r border-gray-200 shadow-lg transform transition-all duration-300 z-30 ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -90,28 +96,48 @@ export default function Topbar() {
           </button>
         </div>
 
-        <nav className="flex flex-col gap-3 p-4">
-          <Link href="/projetos" className="hover:underline" onClick={() => setOpen(false)}>
-            Projetos
+        <nav className="flex flex-col p-4 space-y-2">
+          <Link
+            href="/projetos"
+            className="hover:bg-gray-100 rounded-md px-3 py-2 flex items-center gap-2"
+            onClick={() => setOpen(false)}
+          >
+            📁 Projetos
           </Link>
-          <Link href="/cadastros/clientes" className="hover:underline" onClick={() => setOpen(false)}>
-            Clientes
+          <Link
+            href="/cadastros/clientes"
+            className="hover:bg-gray-100 rounded-md px-3 py-2 flex items-center gap-2"
+            onClick={() => setOpen(false)}
+          >
+            👤 Clientes
           </Link>
-          <Link href="/cadastros/produtos" className="hover:underline" onClick={() => setOpen(false)}>
-            Produtos & Serviços
+          <Link
+            href="/cadastros/produtos"
+            className="hover:bg-gray-100 rounded-md px-3 py-2 flex items-center gap-2"
+            onClick={() => setOpen(false)}
+          >
+            🧱 Produtos & Serviços
           </Link>
           <Link
             href="/cadastros/fornecedores"
-            className="hover:underline"
+            className="hover:bg-gray-100 rounded-md px-3 py-2 flex items-center gap-2"
             onClick={() => setOpen(false)}
           >
-            Fornecedores
+            🚚 Fornecedores
           </Link>
-          <Link href="/cadastros/unidades" className="hover:underline" onClick={() => setOpen(false)}>
-            Unidades
+          <Link
+            href="/cadastros/unidades"
+            className="hover:bg-gray-100 rounded-md px-3 py-2 flex items-center gap-2"
+            onClick={() => setOpen(false)}
+          >
+            ⚙️ Unidades
           </Link>
-          <Link href="/cadastros/vinculos" className="hover:underline" onClick={() => setOpen(false)}>
-            Vínculos
+          <Link
+            href="/cadastros/vinculos"
+            className="hover:bg-gray-100 rounded-md px-3 py-2 flex items-center gap-2"
+            onClick={() => setOpen(false)}
+          >
+            🔗 Vínculos
           </Link>
         </nav>
       </aside>
