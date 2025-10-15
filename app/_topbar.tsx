@@ -19,11 +19,11 @@ export default function Topbar() {
   return (
     <>
       {/* Barra superior */}
-      <header className="flex items-center justify-between bg-white border-b border-gray-200 px-4 py-3 sticky top-0 z-20 shadow-sm">
+      <header className="flex items-center justify-between bg-white border-b border-gray-200 px-5 py-3 sticky top-0 z-30 shadow-sm">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => setOpen(!open)}
-            className="p-2 rounded-md border border-gray-300 hover:bg-gray-100 transition"
+            onClick={() => setOpen(true)}
+            className="p-2 border rounded-md hover:bg-gray-100 transition"
           >
             ☰
           </button>
@@ -66,41 +66,55 @@ export default function Topbar() {
         </div>
       </header>
 
-      {/* Menu lateral */}
+      {/* Overlay escuro de fundo */}
       {open && (
-        <aside className="fixed left-0 top-0 w-64 h-full bg-white shadow-lg z-30 p-4 border-r border-gray-200 animate-slide-in">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="font-semibold text-lg">Menu</h2>
-            <button
-              onClick={() => setOpen(false)}
-              className="p-2 rounded-md hover:bg-gray-100 text-gray-700"
-            >
-              ✕
-            </button>
-          </div>
-
-          <nav className="flex flex-col gap-3">
-            <Link href="/projetos" className="hover:underline">
-              Projetos
-            </Link>
-            <Link href="/cadastros/clientes" className="hover:underline">
-              Clientes
-            </Link>
-            <Link href="/cadastros/produtos" className="hover:underline">
-              Produtos & Serviços
-            </Link>
-            <Link href="/cadastros/fornecedores" className="hover:underline">
-              Fornecedores
-            </Link>
-            <Link href="/cadastros/unidades" className="hover:underline">
-              Unidades
-            </Link>
-            <Link href="/cadastros/vinculos" className="hover:underline">
-              Vínculos
-            </Link>
-          </nav>
-        </aside>
+        <div
+          className="fixed inset-0 bg-black bg-opacity-40 z-20"
+          onClick={() => setOpen(false)}
+        ></div>
       )}
+
+      {/* Menu lateral */}
+      <aside
+        className={`fixed top-0 left-0 h-full w-64 bg-white border-r border-gray-200 shadow-lg transform transition-transform duration-300 z-30 ${
+          open ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
+        <div className="flex justify-between items-center p-4 border-b">
+          <h2 className="font-semibold text-lg">Menu</h2>
+          <button
+            onClick={() => setOpen(false)}
+            className="p-2 rounded-md hover:bg-gray-100 text-gray-700"
+          >
+            ✕
+          </button>
+        </div>
+
+        <nav className="flex flex-col gap-3 p-4">
+          <Link href="/projetos" className="hover:underline" onClick={() => setOpen(false)}>
+            Projetos
+          </Link>
+          <Link href="/cadastros/clientes" className="hover:underline" onClick={() => setOpen(false)}>
+            Clientes
+          </Link>
+          <Link href="/cadastros/produtos" className="hover:underline" onClick={() => setOpen(false)}>
+            Produtos & Serviços
+          </Link>
+          <Link
+            href="/cadastros/fornecedores"
+            className="hover:underline"
+            onClick={() => setOpen(false)}
+          >
+            Fornecedores
+          </Link>
+          <Link href="/cadastros/unidades" className="hover:underline" onClick={() => setOpen(false)}>
+            Unidades
+          </Link>
+          <Link href="/cadastros/vinculos" className="hover:underline" onClick={() => setOpen(false)}>
+            Vínculos
+          </Link>
+        </nav>
+      </aside>
     </>
   );
 }
