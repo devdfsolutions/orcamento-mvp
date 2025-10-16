@@ -150,9 +150,9 @@ export default async function Page() {
           }}
         >
           <colgroup>
-            <col style={{ width: 60 }} />
+            <col style={{ width: 30 }} />
             <col />
-            <col style={{ width: 90 }} />
+            <col style={{ width: 200 }} />
             <col style={{ width: 70 }} />
             <col style={{ width: 140 }} />
             <col style={{ width: 110 }} />
