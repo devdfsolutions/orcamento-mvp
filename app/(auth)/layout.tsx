@@ -5,8 +5,18 @@ export const runtime = "nodejs";
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen grid place-items-center bg-[#f7f7f8]">
-      {children}
-    </div>
+    <html lang="pt-BR">
+      <body
+        style={{
+          minHeight: "100vh",
+          display: "grid",
+          placeItems: "center",
+          background: "#f7f7f8",
+          margin: 0,
+        }}
+      >
+        {children}
+      </body>
+    </html>
   );
 }
