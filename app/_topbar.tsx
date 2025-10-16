@@ -1,181 +1,152 @@
-// app/_topbar.tsx
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
-import { usePathname } from 'next/navigation';
-import { supabase } from '@/lib/supabaseClient';
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { supabase } from "@/lib/supabaseClient";
 
-type Me = { nome: string; role: 'ADM' | 'USER' } | null;
-
-const navBtn: React.CSSProperties = {
-  padding: '8px 10px',
-  border: '1px solid #ddd',
-  borderRadius: 8,
-  background: '#fff',
-  cursor: 'pointer',
-  color: '#111',
-  textDecoration: 'none',
-};
+type Me = { nome: string; role: "ADM" | "USER" } | null;
 
 export default function Topbar() {
   const pathname = usePathname();
+  // Esconde Topbar no login (e outras rotas de auth, se tiver)
+  if (pathname === "/login" || pathname?.startsWith("/auth")) {
+    return null;
+  }
 
-  // 🔒 NÃO renderiza Topbar em telas de auth
-  if (pathname === '/login' || pathname?.startsWith('/auth')) return null;
-
+  const [open, setOpen] = useState(false);
   const [me, setMe] = useState<Me>(null);
-  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
-    fetch('/api/me', { cache: 'no-store' })
+    fetch("/api/me", { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => setMe(d?.role ? { nome: d.nome, role: d.role } : null))
       .catch(() => setMe(null));
   }, []);
 
-  // fecha o menu quando trocar de rota
-  useEffect(() => {
-    setMenuOpen(false);
-  }, [pathname]);
+  const headerStyle: React.CSSProperties = {
+    position: "sticky",
+    top: 0,
+    zIndex: 30,
+    background: "#fff",
+    borderBottom: "1px solid #eee",
+    padding: "8px 16px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    height: 56,
+  };
+
+  const btnStyle: React.CSSProperties = {
+    padding: "8px 10px",
+    border: "1px solid #ddd",
+    borderRadius: 8,
+    background: "#fff",
+    cursor: "pointer",
+  };
+
+  const linkBtn: React.CSSProperties = {
+    padding: "8px 12px",
+    border: "1px solid #ddd",
+    borderRadius: 8,
+    background: "#fff",
+    textDecoration: "none",
+    color: "#111",
+    display: "inline-block",
+  };
+
+  const overlayStyle: React.CSSProperties = {
+    position: "fixed",
+    inset: 0 as any,
+    background: "rgba(0,0,0,0.4)",
+    zIndex: 20,
+    display: open ? "block" : "none",
+  };
+
+  const asideStyle: React.CSSProperties = {
+    position: "fixed",
+    top: 0,
+    left: 0,
+    height: "100vh",
+    width: 260,
+    background: "#fff",
+    borderRight: "1px solid #eee",
+    boxShadow: "0 6px 24px rgba(0,0,0,0.12)",
+    zIndex: 30,
+    transform: open ? "translateX(0)" : "translateX(-100%)",
+    transition: "transform .25s ease",
+    display: "flex",
+    flexDirection: "column",
+  };
+
+  const asideHeader: React.CSSProperties = {
+    padding: 16,
+    borderBottom: "1px solid #eee",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+  };
+
+  const menuLink: React.CSSProperties = {
+    padding: "10px 14px",
+    textDecoration: "none",
+    color: "#111",
+    borderRadius: 8,
+  };
+
+  const navWrap: React.CSSProperties = { padding: 12, display: "grid", gap: 6 };
 
   return (
-    <header style={{ position: 'sticky', top: 0, zIndex: 40, background: '#fff', borderBottom: '1px solid #eee' }}>
-      <div
-        style={{
-          height: 56,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 12,
-          padding: '0 16px',
-          maxWidth: 1100,
-          margin: '0 auto',
-        }}
-      >
-        {/* Hamburguer + título */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button
-            aria-label="Abrir menu"
-            onClick={() => setMenuOpen((v) => !v)}
-            style={{
-              width: 34,
-              height: 34,
-              display: 'grid',
-              placeItems: 'center',
-              borderRadius: 8,
-              border: '1px solid #ddd',
-              background: '#fff',
-              cursor: 'pointer',
-            }}
-          >
+    <>
+      {/* Topbar */}
+      <header style={headerStyle}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <button style={btnStyle} onClick={() => setOpen(true)} aria-label="Abrir menu">
             ☰
           </button>
-
-          <a href="/" style={{ textDecoration: 'none', color: '#111', fontWeight: 700 }}>
+          <Link href="/" style={{ textDecoration: "none", color: "#111", fontWeight: 700 }}>
             Gerador de Projetos
-          </a>
+          </Link>
         </div>
 
-        {/* Ações à direita */}
-        <nav style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <a href="/projetos" style={navBtn}>
-            Projetos
-          </a>
-          {me?.role === 'ADM' && (
-            <a href="/admin/usuarios" style={navBtn}>
-              Admin
-            </a>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <Link href="/projetos" style={linkBtn}>Projetos</Link>
+          {me?.role === "ADM" && (
+            <Link href="/admin/usuarios" style={linkBtn}>Admin</Link>
           )}
-          {!me && (
-            <a href="/login" style={navBtn}>
-              Entrar
-            </a>
-          )}
+          {!me && <Link href="/login" style={linkBtn}>Entrar</Link>}
           {me && (
             <button
+              style={btnStyle}
               onClick={async () => {
                 await supabase.auth.signOut();
-                location.href = '/login';
+                location.href = "/login";
               }}
-              style={navBtn as React.CSSProperties}
             >
               Sair
             </button>
           )}
-        </nav>
-      </div>
-
-      {/* Drawer lateral */}
-      {menuOpen && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 30,
-            display: 'flex',
-          }}
-          onClick={() => setMenuOpen(false)}
-        >
-          <div
-            style={{ flex: 1, background: 'rgba(0,0,0,.2)' }}
-            aria-hidden
-          />
-          <aside
-            role="dialog"
-            aria-label="Menu"
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              width: 260,
-              maxWidth: '80vw',
-              background: '#fff',
-              borderLeft: '1px solid #eee',
-              boxShadow: '-6px 0 24px rgba(0,0,0,.08)',
-              padding: 14,
-              display: 'grid',
-              gap: 10,
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-              <b>Menu</b>
-              <button
-                onClick={() => setMenuOpen(false)}
-                aria-label="Fechar"
-                style={{
-                  width: 28,
-                  height: 28,
-                  display: 'grid',
-                  placeItems: 'center',
-                  borderRadius: 6,
-                  border: '1px solid #ddd',
-                  background: '#fff',
-                  cursor: 'pointer',
-                }}
-              >
-                ✕
-              </button>
-            </div>
-
-            <a href="/projetos" style={{ textDecoration: 'none', color: '#111' }}>
-              Projetos
-            </a>
-            <a href="/cadastros/clientes" style={{ textDecoration: 'none', color: '#111' }}>
-              Clientes
-            </a>
-            <a href="/cadastros/produtos" style={{ textDecoration: 'none', color: '#111' }}>
-              Produtos & Serviços
-            </a>
-            <a href="/cadastros/fornecedores" style={{ textDecoration: 'none', color: '#111' }}>
-              Fornecedores
-            </a>
-            <a href="/cadastros/unidades" style={{ textDecoration: 'none', color: '#111' }}>
-              Unidades
-            </a>
-            <a href="/cadastros/vinculos" style={{ textDecoration: 'none', color: '#111' }}>
-              Vínculos
-            </a>
-          </aside>
         </div>
-      )}
-    </header>
+      </header>
+
+      {/* Overlay */}
+      <div style={overlayStyle} onClick={() => setOpen(false)} />
+
+      {/* Sidebar */}
+      <aside style={asideStyle} aria-hidden={!open}>
+        <div style={asideHeader}>
+          <div style={{ fontWeight: 600 }}>Menu</div>
+          <button style={btnStyle} onClick={() => setOpen(false)} aria-label="Fechar menu">✕</button>
+        </div>
+        <nav style={navWrap}>
+          <Link href="/projetos" style={menuLink} onClick={() => setOpen(false)}>📁 Projetos</Link>
+          <Link href="/cadastros/clientes" style={menuLink} onClick={() => setOpen(false)}>👤 Clientes</Link>
+          <Link href="/cadastros/produtos" style={menuLink} onClick={() => setOpen(false)}>🧱 Produtos & Serviços</Link>
+          <Link href="/cadastros/fornecedores" style={menuLink} onClick={() => setOpen(false)}>🚚 Fornecedores</Link>
+          <Link href="/cadastros/unidades" style={menuLink} onClick={() => setOpen(false)}>⚙️ Unidades</Link>
+          <Link href="/cadastros/vinculos" style={menuLink} onClick={() => setOpen(false)}>🔗 Vínculos</Link>
+        </nav>
+      </aside>
+    </>
   );
 }
