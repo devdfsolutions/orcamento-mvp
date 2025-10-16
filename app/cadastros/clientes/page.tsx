@@ -87,7 +87,6 @@ export default async function Page() {
             alignItems: 'center',
           }}
         >
-          {/* usuarioId oculto */}
           <input type="hidden" name="usuarioId" value={me.id} />
 
           <input
@@ -96,18 +95,93 @@ export default async function Page() {
             required
             style={{ ...input, gridColumn: '1 / span 1' }}
           />
-          <input name="cpf" placeholder="CPF (opcional)" style={input} />
-          <input name="cnpj" placeholder="CNPJ (opcional)" style={input} />
+
+          {/* CPF */}
+          <input
+            name="cpf"
+            placeholder="CPF (opcional)"
+            maxLength={14}
+            style={input}
+            onInput={(e) => {
+              const target = e.currentTarget;
+              let v = target.value.replace(/\D/g, '');
+              if (v.length > 11) v = v.slice(0, 11);
+              v = v.replace(/(\d{3})(\d)/, '$1.$2');
+              v = v.replace(/(\d{3})(\d)/, '$1.$2');
+              v = v.replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+              target.value = v;
+            }}
+          />
+
+          {/* CNPJ */}
+          <input
+            name="cnpj"
+            placeholder="CNPJ (opcional)"
+            maxLength={18}
+            style={input}
+            onInput={(e) => {
+              const target = e.currentTarget;
+              let v = target.value.replace(/\D/g, '');
+              if (v.length > 14) v = v.slice(0, 14);
+              v = v.replace(/^(\d{2})(\d)/, '$1.$2');
+              v = v.replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3');
+              v = v.replace(/\.(\d{3})(\d)/, '.$1/$2');
+              v = v.replace(/(\d{4})(\d)/, '$1-$2');
+              target.value = v;
+            }}
+          />
+
           <input
             name="email"
             placeholder="E-mail (opcional)"
             style={{ ...input, gridColumn: '1 / span 1' }}
           />
           <input name="telefone" placeholder="Telefone (opcional)" style={input} />
+
+          {/* CEP */}
+          <input
+            name="cep"
+            placeholder="CEP (opcional)"
+            maxLength={9}
+            style={input}
+            onInput={(e) => {
+              const target = e.currentTarget;
+              let v = target.value.replace(/\D/g, '');
+              if (v.length > 8) v = v.slice(0, 8);
+              if (v.length > 5) v = v.replace(/(\d{5})(\d)/, '$1-$2');
+              target.value = v;
+            }}
+            onBlur={async (e) => {
+              const cep = e.currentTarget.value.replace(/\D/g, '');
+              if (cep.length === 8) {
+                try {
+                  const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+                  const data = await res.json();
+                  if (!data.erro) {
+                    const endereco = [
+                      data.logradouro,
+                      data.bairro,
+                      data.localidade,
+                      data.uf,
+                    ]
+                      .filter(Boolean)
+                      .join(', ');
+                    const enderecoInput = document.querySelector<HTMLInputElement>(
+                      'input[name="endereco"]'
+                    );
+                    if (enderecoInput) enderecoInput.value = endereco;
+                  }
+                } catch (err) {
+                  console.warn('Erro ao buscar CEP', err);
+                }
+              }
+            }}
+          />
+
           <input
             name="endereco"
             placeholder="Endereço (opcional)"
-            style={{ ...input, gridColumn: '1 / span 2' }}
+            style={{ ...input, gridColumn: '1 / span 3' }}
           />
 
           <div
@@ -143,7 +217,6 @@ export default async function Page() {
               <th style={th}></th>
             </tr>
           </thead>
-
           <tbody>
             {clientes.map((c) => (
               <tr key={c.id}>
@@ -154,17 +227,9 @@ export default async function Page() {
                 <td style={td}>{c.email ?? '—'}</td>
                 <td style={td}>{c.telefone ?? '—'}</td>
                 <td style={td}>{c.endereco ?? '—'}</td>
-
-                <td
-                  style={{
-                    ...td,
-                    whiteSpace: 'nowrap',
-                    textAlign: 'right',
-                  }}
-                >
+                <td style={{ ...td, whiteSpace: 'nowrap', textAlign: 'right' }}>
                   <details style={{ display: 'inline-block', marginRight: 8 }}>
                     <summary style={linkBtn}>Editar</summary>
-
                     <div style={{ paddingTop: 8 }}>
                       <AutoCloseForm
                         id={`edit-${c.id}`}
@@ -182,13 +247,34 @@ export default async function Page() {
                           name="cpf"
                           defaultValue={c.cpf ?? ''}
                           placeholder="CPF"
+                          maxLength={14}
                           style={input}
+                          onInput={(e) => {
+                            const t = e.currentTarget;
+                            let v = t.value.replace(/\D/g, '');
+                            if (v.length > 11) v = v.slice(0, 11);
+                            v = v.replace(/(\d{3})(\d)/, '$1.$2');
+                            v = v.replace(/(\d{3})(\d)/, '$1.$2');
+                            v = v.replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+                            t.value = v;
+                          }}
                         />
                         <input
                           name="cnpj"
                           defaultValue={c.cnpj ?? ''}
                           placeholder="CNPJ"
+                          maxLength={18}
                           style={input}
+                          onInput={(e) => {
+                            const t = e.currentTarget;
+                            let v = t.value.replace(/\D/g, '');
+                            if (v.length > 14) v = v.slice(0, 14);
+                            v = v.replace(/^(\d{2})(\d)/, '$1.$2');
+                            v = v.replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3');
+                            v = v.replace(/\.(\d{3})(\d)/, '.$1/$2');
+                            v = v.replace(/(\d{4})(\d)/, '$1-$2');
+                            t.value = v;
+                          }}
                         />
                         <input
                           name="email"
@@ -233,7 +319,6 @@ export default async function Page() {
                 </td>
               </tr>
             ))}
-
             {clientes.length === 0 && (
               <tr>
                 <td style={td} colSpan={8}>
@@ -266,12 +351,10 @@ const card: React.CSSProperties = {
   borderRadius: 8,
   background: '#fff',
 };
-
 const h2: React.CSSProperties = {
   fontSize: 16,
   margin: '0 0 10px',
 };
-
 const th: React.CSSProperties = {
   textAlign: 'left',
   padding: 10,
@@ -279,7 +362,6 @@ const th: React.CSSProperties = {
   background: '#fafafa',
   fontWeight: 600,
 };
-
 const td: React.CSSProperties = {
   padding: 10,
   borderBottom: '1px solid #f2f2f2',
@@ -287,7 +369,6 @@ const td: React.CSSProperties = {
   wordBreak: 'break-word',
   overflowWrap: 'anywhere',
 };
-
 const input: React.CSSProperties = {
   height: 36,
   padding: '0 10px',
@@ -297,7 +378,6 @@ const input: React.CSSProperties = {
   width: '100%',
   boxSizing: 'border-box',
 };
-
 const btn: React.CSSProperties = {
   height: 36,
   padding: '0 14px',
@@ -307,7 +387,6 @@ const btn: React.CSSProperties = {
   color: '#fff',
   cursor: 'pointer',
 };
-
 const primaryBtn: React.CSSProperties = {
   height: 30,
   padding: '0 12px',
@@ -317,7 +396,6 @@ const primaryBtn: React.CSSProperties = {
   color: '#fff',
   cursor: 'pointer',
 };
-
 const dangerBtn: React.CSSProperties = {
   height: 30,
   padding: '0 10px',
@@ -327,7 +405,6 @@ const dangerBtn: React.CSSProperties = {
   color: '#b40000',
   cursor: 'pointer',
 };
-
 const linkBtn: React.CSSProperties = {
   cursor: 'pointer',
   display: 'inline-block',
