@@ -15,14 +15,14 @@ export const dynamic = 'force-dynamic';
 /* ===== helpers de exibição ===== */
 const digits = (s?: string | null) => (s ? s.replace(/\D+/g, '') : '');
 
-/** 000.000.000-00 */
+/** 000.000.000-00 (exibição do valor já salvo) */
 function formatCPF(v?: string | null) {
   const d = digits(v);
   if (d.length !== 11) return v || '—';
   return d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
 }
 
-/** 00.000.000/0000-00 */
+/** 00.000.000/0000-00 (exibição do valor já salvo) */
 function formatCNPJ(v?: string | null) {
   const d = digits(v);
   if (d.length !== 14) return v || '—';
@@ -96,12 +96,30 @@ export default async function Page() {
             required
             style={{ ...input, gridColumn: '1 / span 1' }}
           />
-          <input name="cpf" placeholder="CPF (opcional)" style={input} />
-          <input name="cnpj" placeholder="CNPJ (opcional)" style={input} />
+
+          {/* >>> máscaras adicionadas via data-mask <<< */}
+          <input
+            name="cpf"
+            placeholder="CPF (opcional)"
+            inputMode="numeric"
+            maxLength={14}              // 000.000.000-00
+            data-mask="cpf"
+            style={input}
+          />
+          <input
+            name="cnpj"
+            placeholder="CNPJ (opcional)"
+            inputMode="numeric"
+            maxLength={18}              // 00.000.000/0000-00
+            data-mask="cnpj"
+            style={input}
+          />
+
           <input
             name="email"
             placeholder="E-mail (opcional)"
             style={{ ...input, gridColumn: '1 / span 1' }}
+            type="email"
           />
           <input name="telefone" placeholder="Telefone (opcional)" style={input} />
           <input
@@ -182,12 +200,18 @@ export default async function Page() {
                           name="cpf"
                           defaultValue={c.cpf ?? ''}
                           placeholder="CPF"
+                          inputMode="numeric"
+                          maxLength={14}
+                          data-mask="cpf"
                           style={input}
                         />
                         <input
                           name="cnpj"
                           defaultValue={c.cnpj ?? ''}
                           placeholder="CNPJ"
+                          inputMode="numeric"
+                          maxLength={18}
+                          data-mask="cnpj"
                           style={input}
                         />
                         <input
@@ -195,6 +219,7 @@ export default async function Page() {
                           defaultValue={c.email ?? ''}
                           placeholder="E-mail"
                           style={input}
+                          type="email"
                         />
                         <input
                           name="telefone"
@@ -255,6 +280,40 @@ export default async function Page() {
           display: inline-block;
         }
       `}</style>
+
+      {/* Script de máscara (aplica em inputs com data-mask="cpf|cnpj") */}
+      <script
+        dangerouslySetInnerHTML={{
+          __html: `
+          (function(){
+            function maskCPF(v){
+              v = v.replace(/\\D/g,'').slice(0,11);
+              v = v.replace(/(\\d{3})(\\d)/, '$1.$2');
+              v = v.replace(/(\\d{3})(\\d)/, '$1.$2');
+              v = v.replace(/(\\d{3})(\\d{1,2})$/, '$1-$2');
+              return v;
+            }
+            function maskCNPJ(v){
+              v = v.replace(/\\D/g,'').slice(0,14);
+              v = v.replace(/^(\\d{2})(\\d)/, '$1.$2');
+              v = v.replace(/^(\\d{2})\\.(\\d{3})(\\d)/, '$1.$2.$3');
+              v = v.replace(/\\.(\\d{3})(\\d)/, '.$1/$2');
+              v = v.replace(/(\\d{4})(\\d)/, '$1-$2');
+              return v;
+            }
+            function onMask(e){
+              var el = e.target;
+              if(!el || !el.getAttribute) return;
+              var type = el.getAttribute('data-mask');
+              if(!type) return;
+              var v = el.value || '';
+              el.value = type === 'cpf' ? maskCPF(v) : maskCNPJ(v);
+            }
+            document.addEventListener('input', onMask, true);
+          })();
+        `,
+        }}
+      />
     </main>
   );
 }
@@ -302,7 +361,7 @@ const btn: React.CSSProperties = {
   height: 36,
   padding: '0 14px',
   borderRadius: 8,
-  border: '1px solid #ddd',
+  border: '1px solid '#ddd',
   background: '#111',
   color: '#fff',
   cursor: 'pointer',
