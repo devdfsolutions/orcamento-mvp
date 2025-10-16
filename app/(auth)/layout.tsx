@@ -1,22 +1,21 @@
-// app/(auth)/layout.tsx
-export const dynamic = "force-dynamic";
+export const dynamic = 'force-dynamic';
 export const revalidate = 0;
-export const runtime = "nodejs";
+export const runtime = 'nodejs';
 
-export default function AuthLayout({ children }: { children: React.ReactNode }) {
+import type { ReactNode } from 'react';
+
+export default function AuthLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="pt-BR">
-      <body
-        style={{
-          minHeight: "100vh",
-          display: "grid",
-          placeItems: "center",
-          background: "#f7f7f8",
-          margin: 0,
-        }}
-      >
-        {children}
-      </body>
-    </html>
+    <div
+      style={{
+        minHeight: '100vh',          // ocupa a tela toda
+        display: 'grid',
+        placeItems: 'center',        // centraliza H e V
+        background: '#f7f7f8',
+        padding: 24,                 // respiro em telas menores
+      }}
+    >
+      {children}
+    </div>
   );
 }
