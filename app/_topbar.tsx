@@ -29,7 +29,7 @@ export default function Topbar() {
   const [open, setOpen] = useState(false);
   const isLogin = useIsLoginRoute();
 
-  // busca usuário
+  // busca usuário logado
   useEffect(() => {
     fetch('/api/me', { cache: 'no-store' })
       .then(r => r.json())
@@ -47,41 +47,45 @@ export default function Topbar() {
     return () => { body.style.overflow = prev || ''; };
   }, [open]);
 
-  // esconde topbar no /login
+  // não mostra o topbar no login
   if (isLogin) return null;
 
+  // cria o overlay e drawer via portal
   const overlay = useMemo(() => {
     if (typeof document === 'undefined') return null;
 
     return createPortal(
       <>
-        {/* Backdrop cobre a viewport INTEIRA e recebe clique */}
+        {/* BACKDROP cobrindo tudo */}
         {open && (
           <div
             onClick={() => setOpen(false)}
             style={{
               position: 'fixed',
-              inset: 0,
+              top: 0,
+              left: 0,
+              width: '100vw',
+              height: '100vh',
               background: 'rgba(0,0,0,.28)',
               backdropFilter: 'blur(1px)',
-              zIndex: 1000,
+              zIndex: 9998,
             }}
           />
         )}
 
-        {/* Drawer por cima do backdrop */}
+        {/* DRAWER fixo à direita */}
         <aside
           aria-hidden={!open}
           style={{
             position: 'fixed',
             top: 0,
             right: 0,
-            height: '100vh',
             width: 320,
+            height: '100vh',
             background: '#fff',
             borderLeft: '1px solid #eee',
             boxShadow: '0 0 40px rgba(0,0,0,.15)',
-            zIndex: 1001,
+            zIndex: 9999,
             transform: `translateX(${open ? '0' : '100%'})`,
             transition: 'transform .25s ease',
             display: 'grid',
@@ -92,7 +96,10 @@ export default function Topbar() {
             <b>Menu</b>
             <button
               onClick={() => setOpen(false)}
-              style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid #ddd', background: '#fff', cursor: 'pointer' }}
+              style={{
+                width: 32, height: 32, borderRadius: 8,
+                border: '1px solid #ddd', background: '#fff', cursor: 'pointer'
+              }}
               aria-label="Fechar menu"
             >
               ×
@@ -116,21 +123,33 @@ export default function Topbar() {
   return (
     <>
       <header style={{
-        position: 'sticky', top: 0, zIndex: 100,
-        background: '#fff', borderBottom: '1px solid #eee'
+        position: 'sticky',
+        top: 0,
+        zIndex: 100,
+        background: '#fff',
+        borderBottom: '1px solid #eee'
       }}>
         <div style={{
-          height: 56, display: 'flex', alignItems: 'center',
-          justifyContent: 'space-between', gap: 12, padding: '0 16px',
-          maxWidth: 1100, margin: '0 auto'
+          height: 56,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          padding: '0 16px',
+          maxWidth: 1100,
+          margin: '0 auto'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <button
               aria-label="menu"
               onClick={() => setOpen(true)}
               style={{
-                width: 34, height: 34, borderRadius: 8, border: '1px solid #ddd',
-                background: '#fff', cursor: 'pointer'
+                width: 34,
+                height: 34,
+                borderRadius: 8,
+                border: '1px solid #ddd',
+                background: '#fff',
+                cursor: 'pointer'
               }}
             >
               ☰
