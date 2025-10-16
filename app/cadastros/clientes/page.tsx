@@ -361,7 +361,7 @@ const btn: React.CSSProperties = {
   height: 36,
   padding: '0 14px',
   borderRadius: 8,
-  border: '1px solid '#ddd',
+  border: '1px solid #ddd', // ✅ corrigido aqui
   background: '#111',
   color: '#fff',
   cursor: 'pointer',
