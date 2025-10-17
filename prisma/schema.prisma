@@ -176,6 +176,9 @@ model Estimativa {
 
   itens EstimativaItem[]
 
+ createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([projetoId])
 }
 
