@@ -187,9 +187,9 @@ export default async function Page() {
 /* ===== estilos inline ===== */
 const card: React.CSSProperties = {
   padding: 12,
-  border: '1px solid '#eee',
+  border: "1px solid #eee",
   borderRadius: 8,
-  background: '#fff',
+  background: "#fff",
 };
 const h2: React.CSSProperties = { fontSize: 16, margin: '0 0 10px' };
 const th: React.CSSProperties = {
