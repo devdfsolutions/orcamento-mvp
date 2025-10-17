@@ -152,6 +152,8 @@ model Projeto {
   id     Int    @id @default(autoincrement())
   nome   String
   status String @default("rascunho") // rascunho | com_estimativa | aprovado | execucao | concluido
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   clienteId Int?
   cliente   ClienteUsuario? @relation(fields: [clienteId], references: [id], onDelete: SetNull)
