@@ -158,8 +158,8 @@ export default function InlineVinculoRow({ v, onSubmit, onDelete }: Props) {
 
   return (
     <tr>
-      <td style={cell}>{v.fornecedor?.nome}</td>
       <td style={cell}>{v.produto?.nome}</td>
+      <td style={cell}>{v.fornecedor?.nome}</td>
       <td style={{ ...cell, textAlign: 'center' }}>
         {v.produto?.unidade?.sigla ?? '—'}
       </td>
