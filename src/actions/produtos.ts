@@ -44,7 +44,7 @@ export async function criarProduto(formData: FormData) {
         unidadeMedidaId,
         categoria,
         tipo,
-        // >>> corrige o erro do banco:
+        // seguros mesmo com defaults no schema
         createdAt: now,
         updatedAt: now,
       },
@@ -81,7 +81,6 @@ export async function atualizarProduto(formData: FormData) {
         unidadeMedidaId,
         categoria,
         tipo,
-        // >>> garante updatedAt
         updatedAt: new Date(),
       },
     });
