@@ -25,17 +25,13 @@ function dateBR(d: Date | string | null | undefined) {
   return `${dd}/${mm}/${yyyy}`;
 }
 
-export default async function Page({
-  searchParams,
-}: {
-  searchParams?: { e?: string; ok?: string };
-}) {
-  // auth
+export default async function Page() {
+  // Auth (Server Component)
   const supabase = await getSupabaseServer();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  // dados
+  // Dados
   const [fornecedores, produtos, vinculos] = await Promise.all([
     prisma.fornecedor.findMany({
       orderBy: { nome: 'asc' },
@@ -58,28 +54,16 @@ export default async function Page({
     }),
   ]);
 
-  const msgErro = searchParams?.e ? decodeURIComponent(searchParams.e) : null;
-  const ok = searchParams?.ok === '1';
-
   return (
     <main style={{ padding: 24, display: 'grid', gap: 16, maxWidth: 1400 }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700 }}>Cadastros / Vínculos Fornecedor ↔ Produto</h1>
-
-      {/* alertas */}
-      {msgErro && (
-        <div style={{ padding: '10px 12px', border: '1px solid #f1d0d0', background: '#ffeaea', color: '#7a0000', borderRadius: 8 }}>
-          {msgErro}
-        </div>
-      )}
-      {ok && (
-        <div style={{ padding: '10px 12px', border: '1px solid #d9f0d0', background: '#f3fff0', color: '#235c00', borderRadius: 8 }}>
-          Salvo com sucesso.
-        </div>
-      )}
+      <h1 style={{ fontSize: 22, fontWeight: 700 }}>
+        Cadastros / Vínculos Fornecedor ↔ Produto
+      </h1>
 
       {/* Novo/Atualizar vínculo (upsert) */}
       <section style={card}>
         <h2 style={h2}>Criar/Atualizar vínculo (upsert)</h2>
+
         <form
           action={upsertVinculo}
           style={{ display: 'grid', gap: 8, gridTemplateColumns: '1fr 1fr 1fr 1fr' }}
@@ -117,6 +101,7 @@ export default async function Page({
             <button type="submit" style={btn}>Salvar</button>
           </div>
         </form>
+
         <p style={{ marginTop: 6, fontSize: 12, color: '#666' }}>
           Dica: selecione o mesmo fornecedor+produto e preencha novos valores para atualizar (upsert).
         </p>
@@ -125,7 +110,12 @@ export default async function Page({
       {/* Lista — colunas invertidas: Produto/Serviço → Fornecedor */}
       <section>
         <table
-          style={{ width: '100%', borderCollapse: 'collapse', background: '#fff', tableLayout: 'fixed' }}
+          style={{
+            width: '100%',
+            borderCollapse: 'collapse',
+            background: '#fff',
+            tableLayout: 'fixed',
+          }}
         >
           <colgroup>
             <col style={{ width: '25%' }} /> {/* Produto/Serviço */}
@@ -141,6 +131,7 @@ export default async function Page({
             <col style={{ width: '15%' }} /> {/* Obs */}
             <col style={{ width: '12%' }} /> {/* Ações */}
           </colgroup>
+
           <thead>
             <tr>
               <th style={th}>Produto/Serviço</th>
@@ -157,9 +148,10 @@ export default async function Page({
               <th style={th}></th>
             </tr>
           </thead>
+
           <tbody>
             {vinculos.map((v) => {
-              // garante number para decimais do Prisma
+              // garante number para decimais do Prisma (Decimal)
               const safeV = {
                 ...v,
                 precoMatP1: v.precoMatP1 ? Number(v.precoMatP1) : null,
@@ -169,6 +161,7 @@ export default async function Page({
                 precoMoM2: v.precoMoM2 ? Number(v.precoMoM2) : null,
                 precoMoM3: v.precoMoM3 ? Number(v.precoMoM3) : null,
               };
+
               return (
                 <InlineVinculoRow
                   key={v.id}
@@ -178,6 +171,7 @@ export default async function Page({
                 />
               );
             })}
+
             {vinculos.length === 0 && (
               <tr>
                 <td style={td} colSpan={12}>Nenhum vínculo cadastrado.</td>
@@ -193,7 +187,7 @@ export default async function Page({
 /* ===== estilos inline ===== */
 const card: React.CSSProperties = {
   padding: 12,
-  border: '1px solid #eee',
+  border: '1px solid '#eee',
   borderRadius: 8,
   background: '#fff',
 };
@@ -210,7 +204,7 @@ const td: React.CSSProperties = {
   padding: 10,
   borderBottom: '1px solid #f2f2f2',
   verticalAlign: 'top',
-  wordBreak: 'break-word',
+  wordBreak: 'word-break',
   overflowWrap: 'anywhere',
 };
 const input: React.CSSProperties = {
