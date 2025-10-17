@@ -52,25 +52,22 @@ model UnidadeMedida {
 }
 
 model ProdutoServico {
-  id              Int                 @id @default(autoincrement())
+  id              Int              @id @default(autoincrement())
   nome            String
-  categoria       String? // opcional
+  categoria       String?
   unidadeMedidaId Int
-  unidade         UnidadeMedida       @relation(fields: [unidadeMedidaId], references: [id])
+  unidade         UnidadeMedida    @relation(fields: [unidadeMedidaId], references: [id])
   fornecedores    FornecedorProduto[]
   itens           EstimativaItem[]
 
-  // Tipo do item (Produto, Serviço ou Ambos)
-  tipo TipoItem @default(AMBOS)
+  tipo        TipoItem @default(AMBOS)
+  refPrecoP1  Decimal? @db.Decimal(12, 2)
+  refPrecoP2  Decimal? @db.Decimal(12, 2)
+  refPrecoP3  Decimal? @db.Decimal(12, 2)
 
-  // Preços de referência opcionais
-  refPrecoP1 Decimal? @db.Decimal(12, 2)
-  refPrecoP2 Decimal? @db.Decimal(12, 2)
-  refPrecoP3 Decimal? @db.Decimal(12, 2)
-
-  // Timestamps
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  // ➜ acrescente estes dois campos:
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@index([nome])
 }
