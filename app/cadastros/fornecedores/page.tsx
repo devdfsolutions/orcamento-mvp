@@ -1,28 +1,22 @@
+export const dynamic = 'force-dynamic';
+
 import ConfirmSubmit from '@/components/ConfirmSubmit';
 import AutoCloseForm from '@/components/AutoCloseForm';
 import DocInput from '@/components/DocInput';
 import { prisma } from '@/lib/prisma';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { redirect } from 'next/navigation';
-import {
-  criarFornecedor,
-  atualizarFornecedor,
-  excluirFornecedor,
-} from '@/actions/fornecedores';
-
-export const dynamic = 'force-dynamic';
+import { criarFornecedor, atualizarFornecedor, excluirFornecedor } from '@/actions/fornecedores';
 
 function docMask(v?: string | null) {
   if (!v) return '—';
   const d = String(v).replace(/\D+/g, '');
-  if (d.length === 11) return d.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4');
-  if (d.length === 14) return d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+  if (d.length === 11) return d.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4'); // CPF
+  if (d.length === 14) return d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5'); // CNPJ
   return v;
 }
 
-export default async function Page({
-  searchParams,
-}: { searchParams?: { e?: string; ok?: string } }) {
+export default async function Page() {
   // auth
   const supabase = await getSupabaseServer();
   const { data: { user } } = await supabase.auth.getUser();
@@ -33,29 +27,9 @@ export default async function Page({
     select: { id: true, nome: true, cnpjCpf: true, contato: true },
   });
 
-  const msgErro = searchParams?.e ? decodeURIComponent(searchParams.e) : null;
-  const ok = searchParams?.ok === '1';
-
   return (
     <main style={{ padding: 24, display: 'grid', gap: 16, maxWidth: 900 }}>
       <h1 style={{ fontSize: 22, fontWeight: 700 }}>Cadastros / Fornecedores</h1>
-
-      {msgErro && (
-        <div style={{ padding: '10px 12px', border: '1px solid #f1d0d0', background: '#ffeaea', color: '#7a0000', borderRadius: 8 }}>
-          {msgErro}
-        </div>
-      )}
-      {ok && (
-        <div style={{ padding: '10px 12px', border: '1px solid #d9f0d0', background: '#f3fff0', color: '#235c00', borderRadius: 8 }}>
-          Salvo com sucesso.
-        </div>
-      )}
-
-      {/* CSS do botão Salvar em edição inline */}
-      <style>{`
-        td .save-btn { display: none; margin-left: 6px; }
-        td details[open] + .save-btn { display: inline-block; }
-      `}</style>
 
       {/* Novo fornecedor */}
       <section style={card}>
@@ -65,6 +39,7 @@ export default async function Page({
           <input name="nome" placeholder="Razão/Nome" required style={input} />
           <DocInput name="cnpjCpf" placeholder="CNPJ/CPF (apenas números)" style={input} />
           <input name="contato" placeholder="Contato (tel/email/obs)" style={input} />
+
           <div style={{ gridColumn: '1 / span 3', display: 'flex', justifyContent: 'flex-end' }}>
             <button type="submit" style={btn}>Salvar</button>
           </div>
@@ -84,15 +59,17 @@ export default async function Page({
             </tr>
           </thead>
           <tbody>
-            {fornecedores.map(f => (
+            {fornecedores.map((f) => (
               <tr key={f.id}>
                 <td style={td}>{f.id}</td>
                 <td style={td}>{f.nome}</td>
                 <td style={td}>{docMask(f.cnpjCpf)}</td>
                 <td style={td}>{f.contato || '—'}</td>
                 <td style={{ ...td, whiteSpace: 'nowrap', textAlign: 'right' }}>
+                  {/* EDITAR */}
                   <details style={{ display: 'inline-block', marginRight: 8 }}>
                     <summary style={linkBtn}>Editar</summary>
+
                     <div style={{ paddingTop: 8 }}>
                       <AutoCloseForm
                         id={`edit-${f.id}`}
@@ -101,16 +78,18 @@ export default async function Page({
                       >
                         <input type="hidden" name="id" value={f.id} />
                         <input name="nome" defaultValue={f.nome} required style={input} />
-                        <DocInput name="cnpjCpf" defaultValue={f.cnpjCpf} placeholder="CNPJ/CPF" style={input} />
+                        <DocInput name="cnpjCpf" defaultValue={f.cnpjCpf ?? ''} placeholder="CNPJ/CPF" style={input} />
                         <input name="contato" defaultValue={f.contato ?? ''} placeholder="Contato" style={input} />
                       </AutoCloseForm>
                     </div>
                   </details>
 
+                  {/* SALVAR (aparece só quando details está aberto) */}
                   <button type="submit" form={`edit-${f.id}`} className="save-btn" style={primaryBtn}>
                     Salvar
                   </button>
 
+                  {/* EXCLUIR */}
                   <form action={excluirFornecedor} style={{ display: 'inline', marginLeft: 8 }}>
                     <input type="hidden" name="id" value={f.id} />
                     <ConfirmSubmit style={dangerBtn} message="Excluir este fornecedor?">
@@ -126,6 +105,11 @@ export default async function Page({
           </tbody>
         </table>
       </section>
+
+      <style>{`
+        td .save-btn { display: none; margin-left: 6px; }
+        td details[open] + .save-btn { display: inline-block; }
+      `}</style>
     </main>
   );
 }
