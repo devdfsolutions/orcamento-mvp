@@ -14,6 +14,7 @@ function backWithError(err: unknown) {
   redirect(`${PAGE}?e=${encodeURIComponent(msg)}`);
 }
 
+/* Helpers */
 function parseMoney(v: FormDataEntryValue | null): number | null {
   if (v == null) return null;
   const s = String(v).trim();
@@ -27,7 +28,7 @@ function r2(n: number | null): number | undefined {
 }
 function parseDateISO(v: FormDataEntryValue | null): Date {
   const s = String(v ?? '').trim();
-  if (!s) return new Date(); // fallback: agora
+  if (!s) return new Date(); // fallback: hoje
   const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
   if (m) {
     const [_, dd, mm, yyyy] = m;
@@ -37,6 +38,7 @@ function parseDateISO(v: FormDataEntryValue | null): Date {
   return isNaN(d.getTime()) ? new Date() : d;
 }
 
+/** UPSERT (Cria ou Atualiza) */
 export async function upsertVinculo(formData: FormData) {
   try {
     const fornecedorId = Number(formData.get('fornecedorId'));
@@ -47,14 +49,18 @@ export async function upsertVinculo(formData: FormData) {
     const precoMatP1 = r2(parseMoney(formData.get('precoMatP1')));
     const precoMatP2 = r2(parseMoney(formData.get('precoMatP2')));
     const precoMatP3 = r2(parseMoney(formData.get('precoMatP3')));
+
     const precoMoM1 = r2(parseMoney(formData.get('precoMoM1')));
     const precoMoM2 = r2(parseMoney(formData.get('precoMoM2')));
     const precoMoM3 = r2(parseMoney(formData.get('precoMoM3')));
-    const dataUltAtual = parseDateISO(formData.get('dataUltAtual'));
-    const observacao = (String(formData.get('observacao') ?? '').trim() || null) as
-      | string
-      | null;
 
+    const dataUltAtual = parseDateISO(formData.get('dataUltAtual'));
+    const observacao =
+      (String(formData.get('observacao') ?? '').trim() || null) as string | null;
+
+    const now = new Date();
+
+    // upsert garante 1 vínculo por par (pela @@unique no schema)
     await prisma.fornecedorProduto.upsert({
       where: { fornecedorId_produtoId: { fornecedorId, produtoId } },
       create: {
@@ -68,7 +74,10 @@ export async function upsertVinculo(formData: FormData) {
         precoMoM3,
         dataUltAtual,
         observacao,
-      },
+        // 👇 evita o erro do NOT NULL
+        createdAt: now,
+        updatedAt: now,
+      } as any,
       update: {
         precoMatP1,
         precoMatP2,
@@ -78,24 +87,28 @@ export async function upsertVinculo(formData: FormData) {
         precoMoM3,
         dataUltAtual,
         observacao,
-      },
+        // 👇 sempre atualiza updatedAt
+        updatedAt: now,
+      } as any,
     });
 
     revalidatePath(PAGE);
-    return redirect(`${PAGE}?ok=1`);
+    redirect(`${PAGE}?ok=1`);
   } catch (err) {
-    return backWithError(err);
+    backWithError(err);
   }
 }
 
+/** EXCLUIR VÍNCULO */
 export async function excluirVinculo(formData: FormData) {
   try {
     const id = Number(formData.get('id'));
-    if (!id) throw new Error('ID inválido.');
+    if (!id) throw new Error('ID inválido');
+
     await prisma.fornecedorProduto.delete({ where: { id } });
     revalidatePath(PAGE);
-    return redirect(`${PAGE}?ok=1`);
+    redirect(`${PAGE}?ok=1`);
   } catch (err) {
-    return backWithError(err);
+    backWithError(err);
   }
 }
