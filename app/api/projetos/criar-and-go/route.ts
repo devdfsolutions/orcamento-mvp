@@ -14,21 +14,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Nome é obrigatório.' }, { status: 400 });
     }
 
-    const now = new Date();
-
-    // cria o projeto já preenchendo os timestamps
+    // ⚠️ Projeto NÃO tem createdAt/updatedAt no schema → não envie.
     const projeto = await prisma.projeto.create({
       data: {
         nome,
         status: 'rascunho',
-        createdAt: now,
-        updatedAt: now,
         ...(clienteId ? { clienteId } : {}),
       },
       select: { id: true },
     });
 
-    // cria a estimativa inicial (se já existir default no schema, ok)
+    // cria a estimativa inicial
     await prisma.estimativa.create({
       data: {
         projetoId: projeto.id,
@@ -39,7 +35,6 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ id: projeto.id });
   } catch (err: any) {
-    // devolve a mensagem de erro do Prisma para aparecer no form
     const msg = err?.message ?? 'Falha ao criar projeto';
     return NextResponse.json({ error: msg }, { status: 500 });
   }
