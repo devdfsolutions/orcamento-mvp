@@ -1,14 +1,19 @@
-// src/lib/prisma.ts
-import { PrismaClient } from "@prisma/client";
+prisma.$use(async (params, next) => {
+  const data = params.args?.data;
+  if (!data) return next(params);
 
-const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
+  // Só injeta se o modelo tiver os campos
+  const withCreated = 'createdAt' in data;
+  const withUpdated = 'updatedAt' in data;
 
-export const prisma =
-  globalForPrisma.prisma ??
-  new PrismaClient({
-    log: process.env.NODE_ENV === "production" ? ["error"] : ["query", "error", "warn"],
-  });
+  if (params.action === 'create') {
+    if (withCreated && data.createdAt == null) data.createdAt = new Date();
+    if (withUpdated && data.updatedAt == null) data.updatedAt = new Date();
+  }
 
-// Evita recriar cliente a cada hot-reload em dev:
-// Na Vercel (production) não entra neste if.
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+  if (params.action === 'update') {
+    if (withUpdated) data.updatedAt = new Date();
+  }
+
+  return next(params);
+});
