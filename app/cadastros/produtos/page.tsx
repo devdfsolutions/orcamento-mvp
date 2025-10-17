@@ -1,28 +1,23 @@
 // ===== Config de runtime =====
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-import { prisma } from "@/lib/prisma";
-import { getSupabaseServer } from "@/lib/supabaseServer";
-import { redirect } from "next/navigation";
-import AutoCloseForm from "@/components/AutoCloseForm";
-import ConfirmSubmit from "@/components/ConfirmSubmit";
-import {
-  criarProduto,
-  atualizarProduto,
-  excluirProduto,
-} from "@/actions/produtos";
+import { prisma } from '@/lib/prisma';
+import { getSupabaseServer } from '@/lib/supabaseServer';
+import { redirect } from 'next/navigation';
+import AutoCloseForm from '@/components/AutoCloseForm';
+import ConfirmSubmit from '@/components/ConfirmSubmit';
+import { criarProduto, atualizarProduto, excluirProduto } from '@/actions/produtos';
 
 /* ===== Helpers ===== */
 function money(v: any) {
   const n = Number(v);
-  if (!Number.isFinite(n)) return "—";
-  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  if (!Number.isFinite(n)) return '—';
+  return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
-
 const tipoLabel = (t?: string | null) =>
-  t === "PRODUTO" ? "Produto" : t === "SERVICO" ? "Serviço" : "Ambos";
+  t === 'PRODUTO' ? 'Produto' : t === 'SERVICO' ? 'Serviço' : 'Ambos';
 
 type VincForn = {
   produtoId: number;
@@ -37,11 +32,11 @@ type VincForn = {
 
 function pickMinMaxByTipo(
   vincs: VincForn[],
-  tipo: "PRODUTO" | "SERVICO" | "AMBOS" | null | undefined
+  tipo: 'PRODUTO' | 'SERVICO' | 'AMBOS' | null | undefined
 ) {
   let min: { preco: number; fornecedor: string } | undefined;
   let max: { preco: number; fornecedor: string } | undefined;
-  const useMO = tipo === "SERVICO";
+  const useMO = tipo === 'SERVICO';
 
   for (const v of vincs) {
     const cand = useMO
@@ -51,29 +46,33 @@ function pickMinMaxByTipo(
     for (const p of cand) {
       const price = Number(p);
       if (!Number.isFinite(price)) continue;
-      if (!min || price < min.preco)
-        min = { preco: price, fornecedor: v.fornecedorNome };
-      if (!max || price > max.preco)
-        max = { preco: price, fornecedor: v.fornecedorNome };
+      if (!min || price < min.preco) min = { preco: price, fornecedor: v.fornecedorNome };
+      if (!max || price > max.preco) max = { preco: price, fornecedor: v.fornecedorNome };
     }
   }
   return { min, max };
 }
 
 /* ===== Página ===== */
-export default async function Page() {
+export default async function Page({
+  searchParams,
+}: {
+  searchParams?: { e?: string; ok?: string };
+}) {
   // Auth
   const supabase = getSupabaseServer();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect('/login');
 
   const [unidades, produtos, vinculos] = await Promise.all([
     prisma.unidadeMedida.findMany({
-      orderBy: { sigla: "asc" },
+      orderBy: { sigla: 'asc' },
       select: { id: true, sigla: true, nome: true },
     }),
     prisma.produtoServico.findMany({
-      orderBy: [{ nome: "asc" }],
+      orderBy: [{ nome: 'asc' }],
       select: {
         id: true,
         nome: true,
@@ -104,9 +103,40 @@ export default async function Page() {
     mapPorProduto.set(v.produtoId, arr);
   }
 
+  const msgErro = searchParams?.e ? decodeURIComponent(searchParams.e) : null;
+  const ok = searchParams?.ok === '1';
+
   return (
-    <main style={{ padding: 24, display: "grid", gap: 16, maxWidth: 1200, margin: "0 auto" }}>
+    <main style={{ padding: 24, display: 'grid', gap: 16, maxWidth: 1200, margin: '0 auto' }}>
       <h1 style={{ fontSize: 22, fontWeight: 700 }}>Cadastros / Produtos & Serviços</h1>
+
+      {/* alertas */}
+      {msgErro && (
+        <div
+          style={{
+            padding: '10px 12px',
+            border: '1px solid #f1d0d0',
+            background: '#ffeaea',
+            color: '#7a0000',
+            borderRadius: 8,
+          }}
+        >
+          {msgErro}
+        </div>
+      )}
+      {ok && (
+        <div
+          style={{
+            padding: '10px 12px',
+            border: '1px solid #d9f0d0',
+            background: '#f3fff0',
+            color: '#235c00',
+            borderRadius: 8,
+          }}
+        >
+          Salvo com sucesso.
+        </div>
+      )}
 
       {/* Novo produto/serviço */}
       <section style={card}>
@@ -114,7 +144,7 @@ export default async function Page() {
 
         <form
           action={criarProduto}
-          style={{ display: "grid", gap: 8, gridTemplateColumns: "1fr 140px 160px 1fr" }}
+          style={{ display: 'grid', gap: 8, gridTemplateColumns: '1fr 140px 160px 1fr' }}
         >
           <input name="nome" placeholder="Nome" required style={input} />
 
@@ -125,7 +155,9 @@ export default async function Page() {
           </select>
 
           <select name="unidadeMedidaId" defaultValue="" required style={{ ...input, height: 36 }}>
-            <option value="" disabled>Selecione UM</option>
+            <option value="" disabled>
+              Selecione UM
+            </option>
             {unidades.map((u) => (
               <option key={u.id} value={u.id}>
                 {u.sigla} — {u.nome}
@@ -135,21 +167,23 @@ export default async function Page() {
 
           <input name="categoria" placeholder="Categoria (opcional)" style={input} />
 
-          <div style={{ gridColumn: "1 / span 4", display: "flex", justifyContent: "flex-end" }}>
-            <button type="submit" style={btn}>Salvar</button>
+          <div style={{ gridColumn: '1 / span 4', display: 'flex', justifyContent: 'flex-end' }}>
+            <button type="submit" style={btn}>
+              Salvar
+            </button>
           </div>
         </form>
       </section>
 
       {/* Lista */}
-      <section style={{ overflowX: "auto" }}>
+      <section style={{ overflowX: 'auto' }}>
         <table
           style={{
-            width: "100%",
+            width: '100%',
             minWidth: 900,
-            borderCollapse: "collapse",
-            background: "#fff",
-            tableLayout: "auto",
+            borderCollapse: 'collapse',
+            background: '#fff',
+            tableLayout: 'auto',
           }}
         >
           <thead>
@@ -159,9 +193,9 @@ export default async function Page() {
               <th style={th}>Tipo</th>
               <th style={th}>UM</th>
               <th style={th}>Categoria</th>
-              <th style={{ ...th, textAlign: "right" }}>P1 (menor)</th>
+              <th style={{ ...th, textAlign: 'right' }}>P1 (menor)</th>
               <th style={th}>Fornecedor (P1)</th>
-              <th style={{ ...th, textAlign: "right" }}>P3 (maior)</th>
+              <th style={{ ...th, textAlign: 'right' }}>P3 (maior)</th>
               <th style={th}>Fornecedor (P3)</th>
               <th style={th}></th>
             </tr>
@@ -170,7 +204,7 @@ export default async function Page() {
           <tbody>
             {produtos.map((p) => {
               const vincs = mapPorProduto.get(p.id) ?? [];
-              const { min, max } = pickMinMaxByTipo(vincs, (p.tipo as any) ?? "AMBOS");
+              const { min, max } = pickMinMaxByTipo(vincs, (p.tipo as any) ?? 'AMBOS');
 
               return (
                 <tr key={p.id}>
@@ -178,24 +212,24 @@ export default async function Page() {
                   <td style={td}>{p.nome}</td>
                   <td style={td}>{tipoLabel(p.tipo)}</td>
                   <td style={td}>{p.unidade?.sigla}</td>
-                  <td style={td}>{p.categoria ?? "—"}</td>
+                  <td style={td}>{p.categoria ?? '—'}</td>
 
-                  <td style={{ ...td, textAlign: "right" }}>{min ? money(min.preco) : "—"}</td>
-                  <td style={td}>{min?.fornecedor ?? "—"}</td>
-                  <td style={{ ...td, textAlign: "right" }}>{max ? money(max.preco) : "—"}</td>
-                  <td style={td}>{max?.fornecedor ?? "—"}</td>
+                  <td style={{ ...td, textAlign: 'right' }}>{min ? money(min.preco) : '—'}</td>
+                  <td style={td}>{min?.fornecedor ?? '—'}</td>
+                  <td style={{ ...td, textAlign: 'right' }}>{max ? money(max.preco) : '—'}</td>
+                  <td style={td}>{max?.fornecedor ?? '—'}</td>
 
-                  <td style={{ ...td, whiteSpace: "nowrap", textAlign: "right" }}>
-                    <details style={{ display: "inline-block", marginRight: 8 }}>
+                  <td style={{ ...td, whiteSpace: 'nowrap', textAlign: 'right' }}>
+                    <details style={{ display: 'inline-block', marginRight: 8 }}>
                       <summary style={linkBtn}>Editar</summary>
                       <div style={{ paddingTop: 8 }}>
                         <AutoCloseForm
                           id={`edit-${p.id}`}
                           action={atualizarProduto}
                           style={{
-                            display: "grid",
+                            display: 'grid',
                             gap: 8,
-                            gridTemplateColumns: "1fr 140px 160px 1fr",
+                            gridTemplateColumns: '1fr 140px 160px 1fr',
                             maxWidth: 900,
                           }}
                         >
@@ -203,7 +237,7 @@ export default async function Page() {
                           <input name="nome" defaultValue={p.nome} required style={input} />
                           <select
                             name="tipo"
-                            defaultValue={String(p.tipo ?? "AMBOS")}
+                            defaultValue={String(p.tipo ?? 'AMBOS')}
                             required
                             style={{ ...input, height: 36 }}
                           >
@@ -225,7 +259,7 @@ export default async function Page() {
                           </select>
                           <input
                             name="categoria"
-                            defaultValue={p.categoria ?? ""}
+                            defaultValue={p.categoria ?? ''}
                             placeholder="Categoria"
                             style={input}
                           />
@@ -237,7 +271,7 @@ export default async function Page() {
                       Salvar
                     </button>
 
-                    <form action={excluirProduto} style={{ display: "inline", marginLeft: 8 }}>
+                    <form action={excluirProduto} style={{ display: 'inline', marginLeft: 8 }}>
                       <input type="hidden" name="id" value={p.id} />
                       <ConfirmSubmit style={dangerBtn} message="Excluir este item?">
                         Excluir
@@ -270,64 +304,64 @@ export default async function Page() {
 /* ===== Estilos ===== */
 const card: React.CSSProperties = {
   padding: 12,
-  border: "1px solid #eee",
+  border: '1px solid #eee',
   borderRadius: 8,
-  background: "#fff",
+  background: '#fff',
 };
-const h2: React.CSSProperties = { fontSize: 16, margin: "0 0 10px" };
+const h2: React.CSSProperties = { fontSize: 16, margin: '0 0 10px' };
 const th: React.CSSProperties = {
-  textAlign: "left",
+  textAlign: 'left',
   padding: 10,
-  borderBottom: "1px solid #eee",
-  background: "#fafafa",
+  borderBottom: '1px solid #eee',
+  background: '#fafafa',
   fontWeight: 600,
 };
 const td: React.CSSProperties = {
   padding: 10,
-  borderBottom: "1px solid #f2f2f2",
-  verticalAlign: "top",
+  borderBottom: '1px solid #f2f2f2',
+  verticalAlign: 'top',
 };
 const input: React.CSSProperties = {
   height: 36,
-  padding: "0 10px",
-  border: "1px solid #ddd",
+  padding: '0 10px',
+  border: '1px solid #ddd',
   borderRadius: 8,
-  outline: "none",
-  width: "100%",
-  boxSizing: "border-box",
+  outline: 'none',
+  width: '100%',
+  boxSizing: 'border-box',
 };
 const btn: React.CSSProperties = {
   height: 36,
-  padding: "0 14px",
+  padding: '0 14px',
   borderRadius: 8,
-  border: "1px solid #ddd",
-  background: "#111",
-  color: "#fff",
-  cursor: "pointer",
+  border: '1px solid #ddd',
+  background: '#111',
+  color: '#fff',
+  cursor: 'pointer',
 };
 const primaryBtn: React.CSSProperties = {
   height: 30,
-  padding: "0 12px",
+  padding: '0 12px',
   borderRadius: 8,
-  border: "1px solid #111",
-  background: "#111",
-  color: "#fff",
-  cursor: "pointer",
+  border: '1px solid #111',
+  background: '#111',
+  color: '#fff',
+  cursor: 'pointer',
 };
 const dangerBtn: React.CSSProperties = {
   height: 30,
-  padding: "0 10px",
+  padding: '0 10px',
   borderRadius: 8,
-  border: "1px solid #f1d0d0",
-  background: "#ffeaea",
-  color: "#b40000",
-  cursor: "pointer",
+  border: '1px solid #f1d0d0',
+  background: '#ffeaea',
+  color: '#b40000',
+  cursor: 'pointer',
 };
 const linkBtn: React.CSSProperties = {
-  cursor: "pointer",
-  display: "inline-block",
-  padding: "4px 10px",
+  cursor: 'pointer',
+  display: 'inline-block',
+  padding: '4px 10px',
   borderRadius: 8,
-  border: "1px solid #ddd",
-  background: "#f8f8f8",
+  border: '1px solid #ddd',
+  background: '#f8f8f8',
 };
