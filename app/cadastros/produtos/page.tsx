@@ -103,7 +103,9 @@ export default async function Page({
     mapPorProduto.set(v.produtoId, arr);
   }
 
-  const msgErro = searchParams?.e ? decodeURIComponent(searchParams.e) : null;
+  const rawErr = searchParams?.e ?? null;
+  const msgErro =
+    rawErr && rawErr !== 'NEXT_REDIRECT' ? decodeURIComponent(rawErr) : null;
   const ok = searchParams?.ok === '1';
 
   return (
