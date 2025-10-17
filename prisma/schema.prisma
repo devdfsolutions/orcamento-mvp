@@ -173,11 +173,10 @@ model Estimativa {
   nome     String   @default("Estimativa")
   criadaEm DateTime @default(now())
   aprovada Boolean  @default(false)
-
-  itens EstimativaItem[]
-
  createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  itens EstimativaItem[]
 
   @@index([projetoId])
 }
@@ -206,6 +205,9 @@ model EstimativaItem {
   valorUnitMo  Decimal? @db.Decimal(12, 2)
 
   totalItem Decimal? @db.Decimal(12, 2)
+
+createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([estimativaId])
   @@index([produtoId])
