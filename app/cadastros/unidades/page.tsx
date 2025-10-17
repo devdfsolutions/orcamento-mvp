@@ -1,3 +1,4 @@
+// app/cadastros/unidades/page.tsx
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 export const runtime = 'nodejs';
@@ -7,46 +8,37 @@ import { criarUnidade, excluirUnidade } from '@/actions/unidades';
 
 export default async function Page({
   searchParams,
-}: {
-  searchParams?: { e?: string; ok?: string };
-}) {
+}: { searchParams?: { e?: string; ok?: string } }) {
+  // carrega
   const unidades = await prisma.unidadeMedida.findMany({
     orderBy: { sigla: 'asc' },
   });
 
-  const msgErro = searchParams?.e ? decodeURIComponent(searchParams.e) : null;
+  // mensagens
+  const rawErr = searchParams?.e ? decodeURIComponent(searchParams.e) : null;
+  const msgErro = rawErr && rawErr !== 'NEXT_REDIRECT' ? rawErr : null;
   const ok = searchParams?.ok === '1';
 
   return (
     <main style={{ padding: 24, maxWidth: 880 }}>
       <h1 style={{ fontSize: 22, fontWeight: 700 }}>cadastros/unidades</h1>
 
-      {/* Alertas */}
+      {/* avisos */}
       {msgErro && (
-        <div
-          style={{
-            marginTop: 12,
-            padding: '10px 12px',
-            border: '1px solid #f1d0d0',
-            background: '#ffeaea',
-            color: '#7a0000',
-            borderRadius: 8,
-          }}
-        >
+        <div style={{
+          marginTop: 12, padding: '10px 12px',
+          border: '1px solid #f1d0d0', background: '#ffeaea',
+          color: '#7a0000', borderRadius: 8
+        }}>
           {msgErro}
         </div>
       )}
       {ok && (
-        <div
-          style={{
-            marginTop: 12,
-            padding: '10px 12px',
-            border: '1px solid #d9f0d0',
-            background: '#f3fff0',
-            color: '#235c00',
-            borderRadius: 8,
-          }}
-        >
+        <div style={{
+          marginTop: 12, padding: '10px 12px',
+          border: '1px solid #d9f0d0', background: '#f3fff0',
+          color: '#235c00', borderRadius: 8
+        }}>
           Salvo com sucesso.
         </div>
       )}
@@ -59,27 +51,20 @@ export default async function Page({
           display: 'grid',
           gap: 8,
           gridTemplateColumns: '160px 1fr auto',
+          alignItems: 'center',
         }}
       >
         <input
           name="sigla"
           placeholder="Sigla (ex: m², m, cm, un, h)"
-          style={{
-            padding: '8px 10px',
-            border: '1px solid #ddd',
-            borderRadius: 8,
-          }}
           required
+          style={{ padding: '8px 10px', border: '1px solid #ddd', borderRadius: 8 }}
         />
         <input
           name="nome"
           placeholder="Nome (ex: Metro quadrado)"
-          style={{
-            padding: '8px 10px',
-            border: '1px solid #ddd',
-            borderRadius: 8,
-          }}
           required
+          style={{ padding: '8px 10px', border: '1px solid #ddd', borderRadius: 8 }}
         />
         <button
           type="submit"
@@ -89,6 +74,7 @@ export default async function Page({
             background: '#111',
             color: '#fff',
             border: '1px solid #111',
+            cursor: 'pointer',
           }}
         >
           Salvar
@@ -110,7 +96,12 @@ export default async function Page({
               <td style={{ padding: 8 }}>{u.sigla}</td>
               <td style={{ padding: 8 }}>{u.nome}</td>
               <td style={{ padding: 8 }}>
-                <form action={excluirUnidade.bind(null, u.id)}>
+                <form
+                  action={async () => {
+                    'use server';
+                    await excluirUnidade(u.id);
+                  }}
+                >
                   <button
                     type="submit"
                     style={{
@@ -118,6 +109,7 @@ export default async function Page({
                       borderRadius: 8,
                       background: '#fff',
                       border: '1px solid #ddd',
+                      cursor: 'pointer',
                     }}
                   >
                     Excluir
