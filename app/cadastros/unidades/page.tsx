@@ -1,35 +1,95 @@
-export const dynamic = "force-dynamic";
+export const dynamic = 'force-dynamic';
 export const revalidate = 0;
-export const runtime = "nodejs";
+export const runtime = 'nodejs';
+
 import { prisma } from '@/lib/prisma';
 import { criarUnidade, excluirUnidade } from '@/actions/unidades';
 
-export default async function Page() {
+export default async function Page({
+  searchParams,
+}: {
+  searchParams?: { e?: string; ok?: string };
+}) {
   const unidades = await prisma.unidadeMedida.findMany({
     orderBy: { sigla: 'asc' },
   });
 
+  const msgErro = searchParams?.e ? decodeURIComponent(searchParams.e) : null;
+  const ok = searchParams?.ok === '1';
+
   return (
-    <main style={{ padding: '24px', maxWidth: 880 }}>
-      <h1 style={{ fontSize: '22px', fontWeight: 700 }}>cadastros/unidades</h1>
+    <main style={{ padding: 24, maxWidth: 880 }}>
+      <h1 style={{ fontSize: 22, fontWeight: 700 }}>cadastros/unidades</h1>
+
+      {/* Alertas */}
+      {msgErro && (
+        <div
+          style={{
+            marginTop: 12,
+            padding: '10px 12px',
+            border: '1px solid #f1d0d0',
+            background: '#ffeaea',
+            color: '#7a0000',
+            borderRadius: 8,
+          }}
+        >
+          {msgErro}
+        </div>
+      )}
+      {ok && (
+        <div
+          style={{
+            marginTop: 12,
+            padding: '10px 12px',
+            border: '1px solid #d9f0d0',
+            background: '#f3fff0',
+            color: '#235c00',
+            borderRadius: 8,
+          }}
+        >
+          Salvo com sucesso.
+        </div>
+      )}
 
       {/* Form criar/editar (upsert pela sigla) */}
-      <form action={criarUnidade} style={{ marginTop: 16, display: 'grid', gap: 8, gridTemplateColumns: '160px 1fr auto' }}>
+      <form
+        action={criarUnidade}
+        style={{
+          marginTop: 16,
+          display: 'grid',
+          gap: 8,
+          gridTemplateColumns: '160px 1fr auto',
+        }}
+      >
         <input
           name="sigla"
           placeholder="Sigla (ex: m², m, cm, un, h)"
-          style={{ padding: '8px 10px', border: '1px solid #ddd', borderRadius: 8 }}
+          style={{
+            padding: '8px 10px',
+            border: '1px solid #ddd',
+            borderRadius: 8,
+          }}
           required
         />
         <input
           name="nome"
           placeholder="Nome (ex: Metro quadrado)"
-          style={{ padding: '8px 10px', border: '1px solid #ddd', borderRadius: 8 }}
+          style={{
+            padding: '8px 10px',
+            border: '1px solid #ddd',
+            borderRadius: 8,
+          }}
           required
         />
         <button
           type="submit"
-          style={{ padding: '8px 14px', borderRadius: 8, background: '#111', color: '#fff', border: '1px solid #111' }}
+          style={{
+            padding: '8px 14px',
+            borderRadius: 8,
+            background: '#111',
+            color: '#fff',
+            border: '1px solid #111',
+          }}
         >
           Salvar
         </button>
@@ -50,15 +110,15 @@ export default async function Page() {
               <td style={{ padding: 8 }}>{u.sigla}</td>
               <td style={{ padding: 8 }}>{u.nome}</td>
               <td style={{ padding: 8 }}>
-                <form
-                  action={async () => {
-                    'use server';
-                    await excluirUnidade(u.id);
-                  }}
-                >
+                <form action={excluirUnidade.bind(null, u.id)}>
                   <button
                     type="submit"
-                    style={{ padding: '6px 10px', borderRadius: 8, background: '#fff', border: '1px solid #ddd' }}
+                    style={{
+                      padding: '6px 10px',
+                      borderRadius: 8,
+                      background: '#fff',
+                      border: '1px solid #ddd',
+                    }}
                   >
                     Excluir
                   </button>
