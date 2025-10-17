@@ -1,69 +1,46 @@
 // app/api/projetos/criar-and-go/route.ts
-export const runtime = 'nodejs';
-
+import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getSupabaseServer } from '@/lib/supabaseServer';
 
 export async function POST(req: Request) {
   try {
-    const supabase = getSupabaseServer();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      return Response.json({ error: 'Não autenticado' }, { status: 401 });
-    }
-
-    // Usuário da aplicação (tabela Usuario) atrelado ao supabaseUserId
-    const usuario = await prisma.usuario.findUnique({
-      where: { supabaseUserId: user.id },
-    });
-    if (!usuario) {
-      return Response.json({ error: 'Usuário não encontrado na base' }, { status: 400 });
-    }
-
     const form = await req.formData();
+
     const nome = String(form.get('nome') ?? '').trim();
     const clienteIdRaw = form.get('clienteId');
     const clienteId = clienteIdRaw ? Number(clienteIdRaw) : null;
 
     if (!nome) {
-      return Response.json({ error: 'Nome é obrigatório' }, { status: 400 });
+      return NextResponse.json({ error: 'Nome é obrigatório.' }, { status: 400 });
     }
 
-    // Se veio clienteId, valida que pertence ao usuário logado
-    let clienteOkId: number | null = null;
-    if (Number.isFinite(clienteId)) {
-      const cliente = await prisma.clienteUsuario.findFirst({
-        where: { id: Number(clienteId), usuarioId: usuario.id },
-        select: { id: true },
-      });
-      if (!cliente) {
-        return Response.json({ error: 'Cliente inválido' }, { status: 400 });
-      }
-      clienteOkId = cliente.id;
-    }
+    const now = new Date();
 
-    // Cria o projeto (status default "rascunho" — ver schema)
+    // cria o projeto já preenchendo os timestamps
     const projeto = await prisma.projeto.create({
       data: {
         nome,
-        clienteId: clienteOkId,
+        status: 'rascunho',
+        createdAt: now,
+        updatedAt: now,
+        ...(clienteId ? { clienteId } : {}),
       },
       select: { id: true },
     });
 
-    // Cria uma estimativa padrão ligada ao projeto
+    // cria a estimativa inicial (se já existir default no schema, ok)
     await prisma.estimativa.create({
       data: {
         projetoId: projeto.id,
         nome: 'Estimativa',
+        // criadaEm já tem @default(now()) no schema
       },
     });
 
-    return Response.json({ id: projeto.id }, { status: 201 });
+    return NextResponse.json({ id: projeto.id });
   } catch (err: any) {
-    console.error('[api/projetos/criar-and-go]', err);
-    const message =
-      err?.message?.slice(0, 300) ?? 'Erro inesperado ao criar projeto';
-    return Response.json({ error: message }, { status: 500 });
+    // devolve a mensagem de erro do Prisma para aparecer no form
+    const msg = err?.message ?? 'Falha ao criar projeto';
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
