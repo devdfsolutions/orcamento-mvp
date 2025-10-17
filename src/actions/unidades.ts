@@ -14,7 +14,6 @@ function backWithError(err: unknown) {
   redirect(`${PAGE}?e=${encodeURIComponent(msg)}`);
 }
 
-/** Upsert por sigla (cria ou atualiza o nome) */
 export async function criarUnidade(formData: FormData) {
   try {
     let sigla = String(formData.get('sigla') || '').trim();
@@ -23,7 +22,6 @@ export async function criarUnidade(formData: FormData) {
     if (!sigla) throw new Error('Informe a sigla.');
     if (!nome) throw new Error('Informe o nome da unidade.');
 
-    // normaliza (chave é a sigla)
     sigla = sigla.toUpperCase();
 
     await prisma.unidadeMedida.upsert({
@@ -32,20 +30,20 @@ export async function criarUnidade(formData: FormData) {
       create: { sigla, nome },
     });
 
+    // ⚡ Corrigido: primeiro revalida, depois só redireciona uma vez
     revalidatePath(PAGE);
-    redirect(`${PAGE}?ok=1`);
+    return redirect(`${PAGE}?ok=1`);
   } catch (err) {
-    backWithError(err);
+    return backWithError(err);
   }
 }
 
-/** Excluir por ID (vai falhar se estiver em uso — ok para o MVP) */
 export async function excluirUnidade(id: number) {
   try {
     await prisma.unidadeMedida.delete({ where: { id } });
     revalidatePath(PAGE);
-    redirect(`${PAGE}?ok=1`);
+    return redirect(`${PAGE}?ok=1`);
   } catch (err) {
-    backWithError(err);
+    return backWithError(err);
   }
 }
