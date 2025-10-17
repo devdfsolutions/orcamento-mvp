@@ -68,6 +68,10 @@ model ProdutoServico {
   refPrecoP2 Decimal? @db.Decimal(12, 2)
   refPrecoP3 Decimal? @db.Decimal(12, 2)
 
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([nome])
 }
 
@@ -103,7 +107,7 @@ model FornecedorProduto {
   precoMoM2 Decimal? @db.Decimal(12, 2)
   precoMoM3 Decimal? @db.Decimal(12, 2)
 
-  dataUltAtual DateTime
+  dataUltAtual DateTime @default(now())
   observacao   String?
 
   @@unique([fornecedorId, produtoId])
