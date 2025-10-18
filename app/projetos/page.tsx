@@ -11,33 +11,37 @@ import { criarProjeto } from '@/actions/estimativas';
 import { excluirProjeto, excluirProjetosEmLote } from '@/actions/projetos';
 
 export default async function Page() {
-  // Auth (Server Component)
+  // Auth
   const supabase = await getSupabaseServer();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  // Meu usuário (inclui role p/ desviar ADM)
+  // Quem sou eu (e qual role)
   const me = await prisma.usuario.findUnique({
     where: { supabaseUserId: user.id },
     select: { id: true, role: true },
   });
   if (!me) redirect('/login');
 
-  // 👉 ADM não usa a tela de projetos
+  // 👉 ADM não usa esta tela — manda para /admin
   if (me.role === 'ADM') redirect('/admin');
 
-  // Clientes do usuário logado
+  // Clientes do meu usuário (para o combo de novo projeto)
   const clientes = await prisma.clienteUsuario.findMany({
     where: { usuarioId: me.id },
     orderBy: { nome: 'asc' },
     select: { id: true, nome: true },
   });
 
-  // Projetos só dos clientes do usuário logado
+  // Projetos visíveis para mim:
+  // - com cliente do meu usuário
+  // - ou sem cliente (opcional; mantenho visíveis)
   const projetos = await prisma.projeto.findMany({
-    where: { cliente: { usuarioId: me.id } }, // <-- escopo por dono
+    where: {
+      OR: [{ cliente: { usuarioId: me.id } }, { clienteId: null }],
+    },
     orderBy: { id: 'desc' },
     include: {
       cliente: { select: { id: true, nome: true } },
@@ -142,9 +146,17 @@ export default async function Page() {
                     <td style={td}>{p.id}</td>
                     <td style={td}>{p.nome}</td>
                     <td style={td}>{p.cliente?.nome ?? '—'}</td>
-                    <td style={td}>{hasAprovada ? 'Estimativa aprovada' : 'Em estimativa'}</td>
+                    <td style={td}>
+                      {hasAprovada ? 'Estimativa aprovada' : 'Em estimativa'}
+                    </td>
 
-                    <td style={{ ...td, whiteSpace: 'nowrap', textAlign: 'right' }}>
+                    <td
+                      style={{
+                        ...td,
+                        whiteSpace: 'nowrap',
+                        textAlign: 'right',
+                      }}
+                    >
                       <a href={`/projetos/${p.id}/itens`} style={linkBtn}>
                         Editar
                       </a>
@@ -159,13 +171,21 @@ export default async function Page() {
                       ) : (
                         <span
                           title="Aprove o projeto para ver o resumo"
-                          style={{ ...linkBtn, marginLeft: 8, opacity: 0.5, cursor: 'not-allowed' }}
+                          style={{
+                            ...linkBtn,
+                            marginLeft: 8,
+                            opacity: 0.5,
+                            cursor: 'not-allowed',
+                          }}
                         >
                           Resumo
                         </span>
                       )}
 
-                      <form action={excluirProjeto} style={{ display: 'inline', marginLeft: 8 }}>
+                      <form
+                        action={excluirProjeto}
+                        style={{ display: 'inline', marginLeft: 8 }}
+                      >
                         <input type="hidden" name="id" value={p.id} />
                         <ConfirmSubmit
                           style={dangerBtn}
@@ -178,7 +198,6 @@ export default async function Page() {
                   </tr>
                 );
               })}
-
               {projetos.length === 0 && (
                 <tr>
                   <td style={td} colSpan={6}>
@@ -209,7 +228,10 @@ const th: React.CSSProperties = {
   background: '#fafafa',
   fontWeight: 600,
 };
-const td: React.CSSProperties = { padding: 10, borderBottom: '1px solid #f2f2f2' };
+const td: React.CSSProperties = {
+  padding: 10,
+  borderBottom: '1px solid #f2f2f2',
+};
 const input: React.CSSProperties = {
   height: 36,
   padding: '0 10px',
