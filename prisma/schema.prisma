@@ -44,21 +44,33 @@ enum Role {
  */
 
 model UnidadeMedida {
-  id       Int              @id @default(autoincrement())
-  sigla    String           @unique
-  nome     String
-  produtos ProdutoServico[]
-  itens    EstimativaItem[] // UM sugerida/override por item
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         Int      @id @default(autoincrement())
+  usuarioId  Int
+  usuario    Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  sigla      String
+  nome       String
+
+  produtos   ProdutoServico[]
+  itens      EstimativaItem[] // UM sugerida/override por item
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([usuarioId, sigla])
+  @@index([usuarioId])
 }
 
 model ProdutoServico {
-  id              Int              @id @default(autoincrement())
+  id              Int      @id @default(autoincrement())
+  usuarioId       Int
+  usuario         Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
   nome            String
   categoria       String?
   unidadeMedidaId Int
-  unidade         UnidadeMedida    @relation(fields: [unidadeMedidaId], references: [id])
+  unidade         UnidadeMedida @relation(fields: [unidadeMedidaId], references: [id])
+
   fornecedores    FornecedorProduto[]
   itens           EstimativaItem[]
 
@@ -67,36 +79,43 @@ model ProdutoServico {
   refPrecoP2  Decimal? @db.Decimal(12, 2)
   refPrecoP3  Decimal? @db.Decimal(12, 2)
 
-  // ➜ acrescente estes dois campos:
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  @@index([nome])
+  @@index([usuarioId, nome])
+  @@index([usuarioId])
 }
 
 model Fornecedor {
-  id      Int     @id @default(autoincrement())
-  nome    String
-  cnpjCpf String
-  contato String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         Int      @id @default(autoincrement())
+  usuarioId  Int
+  usuario    Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
 
-  produtos FornecedorProduto[]
-  itens    EstimativaItem[]    @relation("FornecedorItens")
+  nome       String
+  cnpjCpf    String
+  contato    String?
 
-  @@index([nome])
-  @@index([cnpjCpf])
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  produtos   FornecedorProduto[]
+  itens      EstimativaItem[] @relation("FornecedorItens")
+
+  @@index([usuarioId, nome])
+  @@unique([usuarioId, cnpjCpf])
+  @@index([usuarioId])
 }
 
 model FornecedorProduto {
-  id Int @id @default(autoincrement())
+  id         Int      @id @default(autoincrement())
+  usuarioId  Int
+  usuario    Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
 
   fornecedorId Int
   produtoId    Int
 
-  fornecedor Fornecedor     @relation(fields: [fornecedorId], references: [id], onDelete: Cascade)
-  produto    ProdutoServico @relation(fields: [produtoId], references: [id], onDelete: Cascade)
+  fornecedor   Fornecedor     @relation(fields: [fornecedorId], references: [id], onDelete: Cascade)
+  produto      ProdutoServico @relation(fields: [produtoId], references: [id], onDelete: Cascade)
 
   // 3 preços Materiais
   precoMatP1 Decimal? @db.Decimal(12, 2)
@@ -111,10 +130,11 @@ model FornecedorProduto {
   dataUltAtual DateTime @default(now())
   observacao   String?
 
-createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-  @@unique([fornecedorId, produtoId])
+  @@unique([usuarioId, fornecedorId, produtoId])
+  @@index([usuarioId])
   @@index([fornecedorId])
   @@index([produtoId])
 }
@@ -149,51 +169,63 @@ model ClienteUsuario {
  */
 
 model Projeto {
-  id     Int    @id @default(autoincrement())
-  nome   String
-  status String @default("rascunho") // rascunho | com_estimativa | aprovado | execucao | concluido
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         Int      @id @default(autoincrement())
+  usuarioId  Int
+  usuario    Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
 
-  clienteId Int?
-  cliente   ClienteUsuario? @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  nome       String
+  status     String   @default("rascunho") // rascunho | com_estimativa | aprovado | execucao | concluido
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  clienteId  Int?
+  cliente    ClienteUsuario? @relation(fields: [clienteId], references: [id], onDelete: SetNull)
 
   estimativas Estimativa[]
   resumo      ResumoProjeto?
 
-  @@index([status])
+  @@index([usuarioId, status])
   @@index([clienteId])
+  @@index([usuarioId])
 }
 
 model Estimativa {
-  id        Int     @id @default(autoincrement())
-  projetoId Int
-  projeto   Projeto @relation(fields: [projetoId], references: [id], onDelete: Cascade)
+  id         Int      @id @default(autoincrement())
+  usuarioId  Int
+  usuario    Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
 
-  nome     String   @default("Estimativa")
-  criadaEm DateTime @default(now())
-  aprovada Boolean  @default(false)
- createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  projetoId  Int
+  projeto    Projeto  @relation(fields: [projetoId], references: [id], onDelete: Cascade)
 
-  itens EstimativaItem[]
+  nome       String   @default("Estimativa")
+  criadaEm   DateTime @default(now())
+  aprovada   Boolean  @default(false)
 
-  @@index([projetoId])
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  itens      EstimativaItem[]
+
+  @@index([usuarioId, projetoId])
+  @@index([usuarioId])
 }
 
 model EstimativaItem {
-  id Int @id @default(autoincrement())
+  id           Int      @id @default(autoincrement())
+  usuarioId    Int
+  usuario      Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
 
   estimativaId Int
   estimativa   Estimativa @relation(fields: [estimativaId], references: [id], onDelete: Cascade)
 
-  produtoId Int
-  produto   ProdutoServico @relation(fields: [produtoId], references: [id])
+  produtoId    Int
+  produto      ProdutoServico @relation(fields: [produtoId], references: [id])
 
-  quantidade Decimal @db.Decimal(12, 3)
+  quantidade   Decimal @db.Decimal(12, 3)
 
-  unidadeId Int
-  unidade   UnidadeMedida @relation(fields: [unidadeId], references: [id])
+  unidadeId    Int
+  unidade      UnidadeMedida @relation(fields: [unidadeId], references: [id])
 
   fornecedorId Int
   fornecedor   Fornecedor @relation("FornecedorItens", fields: [fornecedorId], references: [id])
@@ -201,18 +233,19 @@ model EstimativaItem {
   fontePrecoMat FontePrecoMaterial?
   fontePrecoMo  FontePrecoMO?
 
-  valorUnitMat Decimal? @db.Decimal(12, 2)
-  valorUnitMo  Decimal? @db.Decimal(12, 2)
+  valorUnitMat  Decimal? @db.Decimal(12, 2)
+  valorUnitMo   Decimal? @db.Decimal(12, 2)
 
-  totalItem Decimal? @db.Decimal(12, 2)
+  totalItem     Decimal? @db.Decimal(12, 2)
 
-createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  @@index([estimativaId])
+  @@index([usuarioId, estimativaId])
   @@index([produtoId])
   @@index([unidadeId])
   @@index([fornecedorId])
+  @@index([usuarioId])
 }
 
 /**
@@ -244,7 +277,15 @@ model Usuario {
   cnpj           String?
   role           Role    @default(USER)
 
-  clientes ClienteUsuario[]
+  // relações "filhas"
+  unidades       UnidadeMedida[]
+  produtos       ProdutoServico[]
+  fornecedores   Fornecedor[]
+  vinculos       FornecedorProduto[]
+  projetos       Projeto[]
+  estimativas    Estimativa[]
+  itens          EstimativaItem[]
+  clientes       ClienteUsuario[]
 
   @@index([email])
 }
