@@ -9,14 +9,8 @@ const PAGE = '/cadastros/fornecedores';
 
 const digits = (s?: FormDataEntryValue | null) => String(s ?? '').replace(/\D+/g, '');
 
-async function requireMeId() {
-  const { me } = await authUser();
-  if (!me) redirect('/login');
-  return me.id;
-}
-
 export async function criarFornecedor(formData: FormData) {
-  const meId = await requireMeId();
+  const { id: usuarioId } = await authUser();
 
   const nome = String(formData.get('nome') ?? '').trim();
   const cnpjCpf = digits(formData.get('cnpjCpf'));
@@ -28,7 +22,7 @@ export async function criarFornecedor(formData: FormData) {
   }
 
   await prisma.fornecedor.create({
-    data: { usuarioId: meId, nome, cnpjCpf, contato },
+    data: { usuarioId, nome, cnpjCpf, contato },
   });
 
   revalidatePath(PAGE);
@@ -36,7 +30,7 @@ export async function criarFornecedor(formData: FormData) {
 }
 
 export async function atualizarFornecedor(formData: FormData) {
-  const meId = await requireMeId();
+  const { id: usuarioId } = await authUser();
 
   const id = Number(formData.get('id'));
   const nome = String(formData.get('nome') ?? '').trim();
@@ -48,28 +42,28 @@ export async function atualizarFornecedor(formData: FormData) {
     redirect(PAGE);
   }
 
-  const { count } = await prisma.fornecedor.updateMany({
-    where: { id, usuarioId: meId },
+  // protege por usuário
+  await prisma.fornecedor.update({
+    where: { id, usuarioId },
     data: { nome, cnpjCpf, contato },
   });
-
-  if (count === 0) {
-    console.warn('[fornecedores] update ignorado (não pertence ao usuário ou não existe)');
-  }
 
   revalidatePath(PAGE);
   redirect(PAGE);
 }
 
 export async function excluirFornecedor(formData: FormData) {
-  const meId = await requireMeId();
+  const { id: usuarioId } = await authUser();
+
   const id = Number(formData.get('id'));
   if (!id) {
     console.error('[fornecedores] id inválido para excluir');
     redirect(PAGE);
   }
 
-  await prisma.fornecedor.deleteMany({ where: { id, usuarioId: meId } });
+  await prisma.fornecedor.delete({
+    where: { id, usuarioId },
+  });
 
   revalidatePath(PAGE);
   redirect(PAGE);
