@@ -3,106 +3,81 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
-
-/** Normaliza enum do tipo vindo do formulário */
-function parseTipo(v: FormDataEntryValue | null): 'PRODUTO' | 'SERVICO' | 'AMBOS' {
-  const t = String(v ?? 'AMBOS').toUpperCase();
-  if (t === 'PRODUTO' || t === 'SERVICO' || t === 'AMBOS') return t;
-  return 'AMBOS';
-}
+import { getSupabaseServer } from '@/lib/supabaseServer';
 
 const PAGE = '/cadastros/produtos';
 
-function backWithError(err: unknown) {
-  const msg =
-    (err as any)?.message ??
-    (typeof err === 'string' ? err : 'Erro inesperado ao salvar.');
-  console.error('[produtos action]', err);
-  redirect(`${PAGE}?e=${encodeURIComponent(msg)}`);
+async function getMeId() {
+  const sb = await getSupabaseServer();
+  const { data: { user } } = await sb.auth.getUser();
+  if (!user) redirect('/login');
+
+  const me = await prisma.usuario.findUnique({
+    where: { supabaseUserId: user.id },
+    select: { id: true },
+  });
+  if (!me) redirect('/login');
+  return me.id;
 }
 
-/** CREATE (sem preços) */
-export async function criarProduto(formData: FormData) {
-  try {
-    const nome = String(formData.get('nome') ?? '').trim();
-    const unidadeMedidaId = Number(formData.get('unidadeMedidaId'));
-    const categoria = (String(formData.get('categoria') ?? '').trim() || null) as string | null;
-    const tipo = parseTipo(formData.get('tipo'));
+export async function criarProdutoServico(formData: FormData) {
+  const meId = await getMeId();
 
-    if (!nome) throw new Error('Nome é obrigatório.');
-    if (!Number.isFinite(unidadeMedidaId)) throw new Error('Unidade de medida inválida.');
+  const nome = String(formData.get('nome') ?? '').trim();
+  const tipo = String(formData.get('tipo') ?? 'AMBOS').trim() as 'PRODUTO' | 'SERVICO' | 'AMBOS';
+  const unidadeMedidaId = Number(formData.get('unidadeMedidaId'));
+  const categoria = (String(formData.get('categoria') ?? '').trim() || null) as string | null;
 
-    // valida FK explicitamente (mensagem melhor que P2003)
-    const um = await prisma.unidadeMedida.findUnique({ where: { id: unidadeMedidaId } });
-    if (!um) throw new Error('Unidade de medida não encontrada.');
-
-    const now = new Date();
-
-    await prisma.produtoServico.create({
-      data: {
-        nome,
-        unidadeMedidaId,
-        categoria,
-        tipo,
-        // seguros mesmo com defaults no schema
-        createdAt: now,
-        updatedAt: now,
-      },
-    });
-
-    revalidatePath(PAGE);
-    redirect(`${PAGE}?ok=1`);
-  } catch (err) {
-    backWithError(err);
+  if (!nome || !unidadeMedidaId) {
+    redirect(`${PAGE}?e=${encodeURIComponent('Informe nome e unidade.')}`);
   }
+
+  await prisma.produtoServico.create({
+    data: {
+      usuarioId: meId,
+      nome,
+      categoria,
+      unidadeMedidaId,
+      tipo: tipo as any,
+    },
+  });
+
+  revalidatePath(PAGE);
+  redirect(PAGE);
 }
 
-/** UPDATE (sem preços) */
-export async function atualizarProduto(formData: FormData) {
-  try {
-    const id = Number(formData.get('id'));
-    if (!Number.isFinite(id)) throw new Error('ID inválido.');
+export async function atualizarProdutoServico(formData: FormData) {
+  const meId = await getMeId();
 
-    const nome = String(formData.get('nome') ?? '').trim();
-    const unidadeMedidaId = Number(formData.get('unidadeMedidaId'));
-    const categoria = (String(formData.get('categoria') ?? '').trim() || null) as string | null;
-    const tipo = parseTipo(formData.get('tipo'));
+  const id = Number(formData.get('id'));
+  const nome = String(formData.get('nome') ?? '').trim();
+  const tipo = String(formData.get('tipo') ?? 'AMBOS').trim() as 'PRODUTO' | 'SERVICO' | 'AMBOS';
+  const unidadeMedidaId = Number(formData.get('unidadeMedidaId'));
+  const categoria = (String(formData.get('categoria') ?? '').trim() || null) as string | null;
 
-    if (!nome) throw new Error('Nome é obrigatório.');
-    if (!Number.isFinite(unidadeMedidaId)) throw new Error('Unidade de medida inválida.');
-
-    const um = await prisma.unidadeMedida.findUnique({ where: { id: unidadeMedidaId } });
-    if (!um) throw new Error('Unidade de medida não encontrada.');
-
-    await prisma.produtoServico.update({
-      where: { id },
-      data: {
-        nome,
-        unidadeMedidaId,
-        categoria,
-        tipo,
-        updatedAt: new Date(),
-      },
-    });
-
-    revalidatePath(PAGE);
-    redirect(`${PAGE}?ok=1`);
-  } catch (err) {
-    backWithError(err);
+  if (!id || !nome || !unidadeMedidaId) {
+    redirect(`${PAGE}?e=${encodeURIComponent('Dados inválidos.')}`);
   }
+
+  await prisma.produtoServico.update({
+    where: { id, /* segurança extra */ usuarioId: meId },
+    data: { nome, categoria, unidadeMedidaId, tipo: tipo as any },
+  });
+
+  revalidatePath(PAGE);
+  redirect(PAGE);
 }
 
-/** DELETE */
-export async function excluirProduto(formData: FormData) {
-  try {
-    const id = Number(formData.get('id'));
-    if (!Number.isFinite(id)) throw new Error('ID inválido.');
+export async function excluirProdutoServico(formData: FormData) {
+  const meId = await getMeId();
 
-    await prisma.produtoServico.delete({ where: { id } });
+  const id = Number(formData.get('id'));
+  if (!id) redirect(`${PAGE}?e=${encodeURIComponent('Produto inválido.')}`);
 
-    revalidatePath(PAGE);
-    redirect(`${PAGE}?ok=1`);
-  } catch (err) {
-    backWithError(err);
-  }
+  await prisma.produtoServico.delete({
+    where: { id, usuarioId: meId },
+  });
+
+  revalidatePath(PAGE);
+  redirect(PAGE);
 }
