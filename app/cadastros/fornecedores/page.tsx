@@ -4,9 +4,9 @@ import ConfirmSubmit from '@/components/ConfirmSubmit';
 import AutoCloseForm from '@/components/AutoCloseForm';
 import DocInput from '@/components/DocInput';
 import { prisma } from '@/lib/prisma';
-import { getSupabaseServer } from '@/lib/supabaseServer';
 import { redirect } from 'next/navigation';
 import { criarFornecedor, atualizarFornecedor, excluirFornecedor } from '@/actions/fornecedores';
+import { getAuthUser } from '@/lib/authUser';
 
 function docMask(v?: string | null) {
   if (!v) return '—';
@@ -17,19 +17,10 @@ function docMask(v?: string | null) {
 }
 
 export default async function Page() {
-  // auth
-  const supabase = await getSupabaseServer();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
-
-  // pega meu ID interno
-  const me = await prisma.usuario.findUnique({
-    where: { supabaseUserId: user.id },
-    select: { id: true },
-  });
+  // auth centralizada
+  const me = await getAuthUser(true);
   if (!me) redirect('/login');
 
-  // somente meus fornecedores
   const fornecedores = await prisma.fornecedor.findMany({
     where: { usuarioId: me.id },
     orderBy: [{ nome: 'asc' }],
@@ -48,7 +39,6 @@ export default async function Page() {
           <input name="nome" placeholder="Razão/Nome" required style={input} />
           <DocInput name="cnpjCpf" placeholder="CNPJ/CPF (apenas números)" style={input} />
           <input name="contato" placeholder="Contato (tel/email/obs)" style={input} />
-
           <div style={{ gridColumn: '1 / span 3', display: 'flex', justifyContent: 'flex-end' }}>
             <button type="submit" style={btn}>Salvar</button>
           </div>
@@ -75,10 +65,8 @@ export default async function Page() {
                 <td style={td}>{docMask(f.cnpjCpf)}</td>
                 <td style={td}>{f.contato || '—'}</td>
                 <td style={{ ...td, whiteSpace: 'nowrap', textAlign: 'right' }}>
-                  {/* EDITAR */}
                   <details style={{ display: 'inline-block', marginRight: 8 }}>
                     <summary style={linkBtn}>Editar</summary>
-
                     <div style={{ paddingTop: 8 }}>
                       <AutoCloseForm
                         id={`edit-${f.id}`}
@@ -93,12 +81,10 @@ export default async function Page() {
                     </div>
                   </details>
 
-                  {/* SALVAR (aparece só quando details está aberto) */}
                   <button type="submit" form={`edit-${f.id}`} className="save-btn" style={primaryBtn}>
                     Salvar
                   </button>
 
-                  {/* EXCLUIR */}
                   <form action={excluirFornecedor} style={{ display: 'inline', marginLeft: 8 }}>
                     <input type="hidden" name="id" value={f.id} />
                     <ConfirmSubmit style={dangerBtn} message="Excluir este fornecedor?">
@@ -130,6 +116,6 @@ const th: React.CSSProperties = { textAlign: 'left', padding: 10, borderBottom: 
 const td: React.CSSProperties = { padding: 10, borderBottom: '1px solid #f2f2f2', verticalAlign: 'top', wordBreak: 'break-word', overflowWrap: 'anywhere' };
 const input: React.CSSProperties = { height: 36, padding: '0 10px', border: '1px solid #ddd', borderRadius: 8, outline: 'none', width: '100%', boxSizing: 'border-box' };
 const btn: React.CSSProperties = { height: 36, padding: '0 14px', borderRadius: 8, border: '1px solid #ddd', background: '#111', color: '#fff', cursor: 'pointer' };
-const primaryBtn: React.CSSProperties = { height: 30, padding: '0 12px', borderRadius: 8, border: '1px solid #111', background: '#111', color: '#fff', cursor: 'pointer' };
-const dangerBtn: React.CSSProperties = { height: 30, padding: '0 10px', borderRadius: 8, border: '1px solid #f1d0d0', background: '#ffeaea', color: '#b40000', cursor: 'pointer' };
+const primaryBtn: React.CSSProperties = { height: 30, padding: '0 12px', border: '1px solid #111', background: '#111', color: '#fff', cursor: 'pointer' };
+const dangerBtn: React.CSSProperties = { height: 30, padding: '0 10px', border: '1px solid #f1d0d0', background: '#ffeaea', color: '#b40000', cursor: 'pointer' };
 const linkBtn: React.CSSProperties = { cursor: 'pointer', display: 'inline-block', padding: '4px 10px', borderRadius: 8, border: '1px solid #ddd', background: '#f8f8f8' };
