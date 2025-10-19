@@ -1,11 +1,30 @@
 import { prisma } from '@/lib/prisma';
+import { getSupabaseServer } from '@/lib/supabaseServer';
+import { redirect } from 'next/navigation';
+
 export const dynamic = 'force-dynamic';
 
 const money = (v: any) =>
   Number(v ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 export default async function Home() {
+  // exige login
+  const supabase = await getSupabaseServer();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect('/login');
+
+  const me = await prisma.usuario.findUnique({
+    where: { supabaseUserId: user.id },
+    select: { id: true, role: true },
+  });
+  if (!me) redirect('/login');
+
+  // ADM -> manda pro admin diretamente
+  if (me.role === 'ADM') redirect('/admin');
+
+  // Tudo filtrado por usuarioId
   const projetos = await prisma.projeto.findMany({
+    where: { usuarioId: me.id },
     orderBy: { id: 'desc' },
     include: { cliente: true },
   });
@@ -16,9 +35,9 @@ export default async function Home() {
   const execucao     = projetos.filter(p => p.status === 'execucao').length;
   const concluidos   = projetos.filter(p => p.status === 'concluido').length;
 
-  // estimativas aprovadas dos projetos ainda não concluídos
+  // estimativas aprovadas dos projetos ainda não concluídos (do meu usuário)
   const aprovadas = await prisma.estimativa.findMany({
-    where: { aprovada: true, projeto: { NOT: { status: 'concluido' } } },
+    where: { usuarioId: me.id, aprovada: true, projeto: { NOT: { status: 'concluido' }, usuarioId: me.id } },
     include: { itens: true, projeto: { include: { cliente: true } } },
     orderBy: { id: 'desc' },
   });
@@ -29,7 +48,7 @@ export default async function Home() {
   const ultimos = await Promise.all(
     projetos.slice(0, 6).map(async (p) => {
       const estAprov = await prisma.estimativa.findFirst({
-        where: { projetoId: p.id, aprovada: true },
+        where: { projetoId: p.id, usuarioId: me.id, aprovada: true },
         include: { itens: true },
       });
       const totalAprov = estAprov?.itens.reduce((a, i) => a + Number(i.totalItem || 0), 0) ?? 0;
