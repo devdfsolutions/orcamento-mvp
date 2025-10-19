@@ -13,9 +13,7 @@ import { excluirProjeto, excluirProjetosEmLote } from '@/actions/projetos';
 export default async function Page() {
   // Auth
   const supabase = await getSupabaseServer();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
   // Quem sou eu (e qual role)
@@ -35,13 +33,9 @@ export default async function Page() {
     select: { id: true, nome: true },
   });
 
-  // Projetos visíveis para mim:
-  // - com cliente do meu usuário
-  // - ou sem cliente (opcional; mantenho visíveis)
+  // Projetos do meu usuário
   const projetos = await prisma.projeto.findMany({
-    where: {
-      OR: [{ cliente: { usuarioId: me.id } }, { clienteId: null }],
-    },
+    where: { usuarioId: me.id },
     orderBy: { id: 'desc' },
     include: {
       cliente: { select: { id: true, nome: true } },
@@ -69,19 +63,12 @@ export default async function Page() {
             alignItems: 'center',
           }}
         >
-          <input
-            name="nome"
-            placeholder="Nome do projeto"
-            required
-            style={input}
-          />
+          <input name="nome" placeholder="Nome do projeto" required style={input} />
 
           <select name="clienteId" defaultValue="" style={{ ...input, height: 36 }}>
             <option value="">Cliente (opcional)</option>
             {clientes.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.nome}
-              </option>
+              <option key={c.id} value={c.id}>{c.nome}</option>
             ))}
           </select>
 
@@ -150,42 +137,23 @@ export default async function Page() {
                       {hasAprovada ? 'Estimativa aprovada' : 'Em estimativa'}
                     </td>
 
-                    <td
-                      style={{
-                        ...td,
-                        whiteSpace: 'nowrap',
-                        textAlign: 'right',
-                      }}
-                    >
-                      <a href={`/projetos/${p.id}/itens`} style={linkBtn}>
-                        Editar
-                      </a>
+                    <td style={{ ...td, whiteSpace: 'nowrap', textAlign: 'right' }}>
+                      <a href={`/projetos/${p.id}/itens`} style={linkBtn}>Editar</a>
 
                       {hasAprovada ? (
-                        <a
-                          href={`/projetos/${p.id}/estimativas`}
-                          style={{ ...linkBtn, marginLeft: 8 }}
-                        >
+                        <a href={`/projetos/${p.id}/estimativas`} style={{ ...linkBtn, marginLeft: 8 }}>
                           Resumo
                         </a>
                       ) : (
                         <span
                           title="Aprove o projeto para ver o resumo"
-                          style={{
-                            ...linkBtn,
-                            marginLeft: 8,
-                            opacity: 0.5,
-                            cursor: 'not-allowed',
-                          }}
+                          style={{ ...linkBtn, marginLeft: 8, opacity: 0.5, cursor: 'not-allowed' }}
                         >
                           Resumo
                         </span>
                       )}
 
-                      <form
-                        action={excluirProjeto}
-                        style={{ display: 'inline', marginLeft: 8 }}
-                      >
+                      <form action={excluirProjeto} style={{ display: 'inline', marginLeft: 8 }}>
                         <input type="hidden" name="id" value={p.id} />
                         <ConfirmSubmit
                           style={dangerBtn}
@@ -214,56 +182,11 @@ export default async function Page() {
 }
 
 /* estilos */
-const card: React.CSSProperties = {
-  padding: 12,
-  border: '1px solid #eee',
-  borderRadius: 8,
-  background: '#fff',
-};
+const card: React.CSSProperties = { padding: 12, border: '1px solid #eee', borderRadius: 8, background: '#fff' };
 const h2: React.CSSProperties = { fontSize: 16, margin: '0 0 10px' };
-const th: React.CSSProperties = {
-  textAlign: 'left',
-  padding: 10,
-  borderBottom: '1px solid #eee',
-  background: '#fafafa',
-  fontWeight: 600,
-};
-const td: React.CSSProperties = {
-  padding: 10,
-  borderBottom: '1px solid #f2f2f2',
-};
-const input: React.CSSProperties = {
-  height: 36,
-  padding: '0 10px',
-  border: '1px solid #ddd',
-  borderRadius: 8,
-  outline: 'none',
-  minWidth: 220,
-};
-const btn: React.CSSProperties = {
-  height: 36,
-  padding: '0 14px',
-  borderRadius: 8,
-  border: '1px solid #ddd',
-  background: '#111',
-  color: '#fff',
-  cursor: 'pointer',
-};
-const linkBtn: React.CSSProperties = {
-  display: 'inline-block',
-  padding: '8px 12px',
-  border: '1px solid #ddd',
-  borderRadius: 8,
-  background: '#f8f8f8',
-  textDecoration: 'none',
-  color: '#111',
-};
-const dangerBtn: React.CSSProperties = {
-  height: 30,
-  padding: '0 10px',
-  borderRadius: 8,
-  border: '1px solid #f1d0d0',
-  background: '#ffeaea',
-  color: '#b40000',
-  cursor: 'pointer',
-};
+const th: React.CSSProperties = { textAlign: 'left', padding: 10, borderBottom: '1px solid #eee', background: '#fafafa', fontWeight: 600 };
+const td: React.CSSProperties = { padding: 10, borderBottom: '1px solid #f2f2f2' };
+const input: React.CSSProperties = { height: 36, padding: '0 10px', border: '1px solid #ddd', borderRadius: 8, outline: 'none', minWidth: 220 };
+const btn: React.CSSProperties = { height: 36, padding: '0 14px', borderRadius: 8, border: '1px solid #ddd', background: '#111', color: '#fff', cursor: 'pointer' };
+const linkBtn: React.CSSProperties = { display: 'inline-block', padding: '8px 12px', border: '1px solid #ddd', borderRadius: 8, background: '#f8f8f8', textDecoration: 'none', color: '#111' };
+const dangerBtn: React.CSSProperties = { height: 30, padding: '0 10px', borderRadius: 8, border: '1px solid #f1d0d0', background: '#ffeaea', color: '#b40000', cursor: 'pointer' };
