@@ -2,9 +2,25 @@
 
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
+import { getSupabaseServer } from '@/lib/supabaseServer';
 
-/** Atualizar nome/status/cliente */
+async function meId() {
+  const supabase = await getSupabaseServer();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect('/login');
+  const me = await prisma.usuario.findUnique({
+    where: { supabaseUserId: user.id },
+    select: { id: true },
+  });
+  if (!me) redirect('/login');
+  return me.id;
+}
+
+/** Atualizar nome/status/cliente (scoped por usuário) */
 export async function atualizarProjeto(formData: FormData) {
+  const usuarioId = await meId();
+
   const id = Number(formData.get('id'));
   const nome = String(formData.get('nome') ?? '').trim();
   const status = String(formData.get('status') ?? '').trim();
@@ -13,8 +29,8 @@ export async function atualizarProjeto(formData: FormData) {
 
   if (!id || !nome) throw new Error('Dados inválidos');
 
-  await prisma.projeto.update({
-    where: { id },
+  await prisma.projeto.updateMany({
+    where: { id, usuarioId },
     data: {
       nome,
       status,
@@ -26,26 +42,26 @@ export async function atualizarProjeto(formData: FormData) {
   revalidatePath(`/projetos/${id}`);
 }
 
-/** Excluir um projeto (cascata via FK/Prisma) */
+/** Excluir um projeto (scoped por usuário) */
 export async function excluirProjeto(formData: FormData) {
+  const usuarioId = await meId();
   const id = Number(formData.get('id'));
   if (!id) throw new Error('Projeto inválido');
 
-  await prisma.projeto.delete({ where: { id } });
+  await prisma.projeto.deleteMany({ where: { id, usuarioId } });
 
   revalidatePath('/projetos');
 }
 
-/** Excluir vários projetos de uma vez (checkbox + botão) */
+/** Excluir vários projetos (scoped por usuário) */
 export async function excluirProjetosEmLote(formData: FormData) {
-  // form envia vários "ids"
+  const usuarioId = await meId();
   const idsRaw = formData.getAll('ids');
   const ids = idsRaw.map(v => Number(v)).filter(n => Number.isFinite(n));
-
   if (!ids.length) throw new Error('Selecione ao menos um projeto.');
 
   await prisma.projeto.deleteMany({
-    where: { id: { in: ids } },
+    where: { id: { in: ids }, usuarioId },
   });
 
   revalidatePath('/projetos');
