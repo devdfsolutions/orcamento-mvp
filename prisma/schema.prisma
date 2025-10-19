@@ -99,6 +99,7 @@ model Fornecedor {
   @@unique([usuarioId, cnpjCpf])
   @@index([usuarioId, nome])
   @@index([usuarioId])
+  @@unique([id, usuarioId], name: "Fornecedor_id_usuarioId_key")
 }
 
 model FornecedorProduto {
