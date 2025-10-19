@@ -87,7 +87,7 @@ model Fornecedor {
   usuario    Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
 
   nome       String
-  cnpjCpf    String
+  cnpjCpf    String?
   contato    String?
 
   createdAt  DateTime @default(now())
