@@ -4,13 +4,27 @@ export const revalidate = 0;
 export const runtime = 'nodejs';
 
 import { prisma } from '@/lib/prisma';
+import { getSupabaseServer } from '@/lib/supabaseServer';
+import { redirect } from 'next/navigation';
 import { criarUnidade, excluirUnidade } from '@/actions/unidades';
 
 export default async function Page({
   searchParams,
 }: { searchParams?: { e?: string; ok?: string } }) {
-  // carrega
+  // auth + perfil
+  const supabase = await getSupabaseServer();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect('/login');
+
+  const me = await prisma.usuario.findUnique({
+    where: { supabaseUserId: user.id },
+    select: { id: true },
+  });
+  if (!me) redirect('/login');
+
+  // carrega do meu usuário
   const unidades = await prisma.unidadeMedida.findMany({
+    where: { usuarioId: me.id },
     orderBy: { sigla: 'asc' },
   });
 
@@ -43,7 +57,7 @@ export default async function Page({
         </div>
       )}
 
-      {/* Form criar/editar (upsert pela sigla) */}
+      {/* Form criar/editar (upsert pela sigla dentro do usuário) */}
       <form
         action={criarUnidade}
         style={{
@@ -118,11 +132,14 @@ export default async function Page({
               </td>
             </tr>
           ))}
+          {unidades.length === 0 && (
+            <tr><td colSpan={3} style={{ padding: 12, color: '#666' }}>Nenhuma unidade cadastrada.</td></tr>
+          )}
         </tbody>
       </table>
 
       <p style={{ marginTop: 10, color: '#666', fontSize: 12 }}>
-        Dica: use <b>sigla</b> como chave (é única). Repetir a sigla atualiza o nome.
+        Dica: use <b>sigla</b> como chave (é única por usuário). Repetir a sigla atualiza o nome.
       </p>
     </main>
   );
