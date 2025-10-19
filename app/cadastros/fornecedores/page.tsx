@@ -4,7 +4,8 @@ import ConfirmSubmit from '@/components/ConfirmSubmit';
 import AutoCloseForm from '@/components/AutoCloseForm';
 import DocInput from '@/components/DocInput';
 import { prisma } from '@/lib/prisma';
-import { authUser } from '@/lib/authUser';
+import { getSupabaseServer } from '@/lib/supabaseServer';
+import { redirect } from 'next/navigation';
 import { criarFornecedor, atualizarFornecedor, excluirFornecedor } from '@/actions/fornecedores';
 
 function docMask(v?: string | null) {
@@ -16,9 +17,19 @@ function docMask(v?: string | null) {
 }
 
 export default async function Page() {
-  // auth (server)
-  const { me } = await authUser();
+  // auth
+  const supabase = await getSupabaseServer();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect('/login');
 
+  // pega meu ID interno
+  const me = await prisma.usuario.findUnique({
+    where: { supabaseUserId: user.id },
+    select: { id: true },
+  });
+  if (!me) redirect('/login');
+
+  // somente meus fornecedores
   const fornecedores = await prisma.fornecedor.findMany({
     where: { usuarioId: me.id },
     orderBy: [{ nome: 'asc' }],
