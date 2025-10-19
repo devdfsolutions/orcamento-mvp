@@ -7,12 +7,16 @@ import { authUser } from '@/lib/authUser';
 
 const PAGE = '/cadastros/fornecedores';
 
-// mantém só dígitos
 const digits = (s?: FormDataEntryValue | null) => String(s ?? '').replace(/\D+/g, '');
 
-/** Criar fornecedor (escopo do usuário) */
+async function requireMeId() {
+  const { me } = await authUser();
+  if (!me) redirect('/login');
+  return me.id;
+}
+
 export async function criarFornecedor(formData: FormData) {
-  const { me } = await authUser(); // lança se não logado
+  const meId = await requireMeId();
 
   const nome = String(formData.get('nome') ?? '').trim();
   const cnpjCpf = digits(formData.get('cnpjCpf'));
@@ -24,24 +28,15 @@ export async function criarFornecedor(formData: FormData) {
   }
 
   await prisma.fornecedor.create({
-    data: {
-      usuarioId: me.id,
-      nome,
-      // ATENÇÃO: no seu schema atual cnpjCpf é NOT NULL + unique por usuário.
-      // Se quiser permitir deixar vazio e cadastrar vários sem doc,
-      // torne o campo opcional no Prisma (String?) e rode migration.
-      cnpjCpf: cnpjCpf || '',
-      contato,
-    },
+    data: { usuarioId: meId, nome, cnpjCpf, contato },
   });
 
   revalidatePath(PAGE);
   redirect(PAGE);
 }
 
-/** Atualizar fornecedor (só do usuário corrente) */
 export async function atualizarFornecedor(formData: FormData) {
-  const { me } = await authUser();
+  const meId = await requireMeId();
 
   const id = Number(formData.get('id'));
   const nome = String(formData.get('nome') ?? '').trim();
@@ -53,29 +48,28 @@ export async function atualizarFornecedor(formData: FormData) {
     redirect(PAGE);
   }
 
-  // where inclui usuarioId para não permitir editar de outro usuário
-  await prisma.fornecedor.update({
-    where: { id_usuarioId: { id, usuarioId: me.id } }, // <- precisa do índice composto
-    data: { nome, cnpjCpf: cnpjCpf || '', contato },
+  const { count } = await prisma.fornecedor.updateMany({
+    where: { id, usuarioId: meId },
+    data: { nome, cnpjCpf, contato },
   });
+
+  if (count === 0) {
+    console.warn('[fornecedores] update ignorado (não pertence ao usuário ou não existe)');
+  }
 
   revalidatePath(PAGE);
   redirect(PAGE);
 }
 
-/** Excluir fornecedor (só do usuário corrente) */
 export async function excluirFornecedor(formData: FormData) {
-  const { me } = await authUser();
-
+  const meId = await requireMeId();
   const id = Number(formData.get('id'));
   if (!id) {
     console.error('[fornecedores] id inválido para excluir');
     redirect(PAGE);
   }
 
-  await prisma.fornecedor.delete({
-    where: { id_usuarioId: { id, usuarioId: me.id } },
-  });
+  await prisma.fornecedor.deleteMany({ where: { id, usuarioId: meId } });
 
   revalidatePath(PAGE);
   redirect(PAGE);
