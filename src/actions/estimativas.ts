@@ -2,6 +2,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';   // <<< IMPORTANTE
 import { prisma } from '@/lib/prisma';
 
 /* ===== helpers ===== */
@@ -49,7 +50,7 @@ async function pickPrecoFromVinculo(
   return { mat, mo };
 }
 
-/* util: volta para /projetos/[id]/itens com msg de erro */
+/* ==== redireciona para /projetos/[pid]/itens com mensagem, sem quebrar a página ==== */
 async function backToItensWithError(estimativaId: number, err: unknown) {
   const est = await prisma.estimativa.findUnique({
     where: { id: estimativaId },
@@ -59,13 +60,13 @@ async function backToItensWithError(estimativaId: number, err: unknown) {
   const msg =
     (err as any)?.message ??
     (typeof err === 'string' ? err : 'Falha ao salvar o item.');
-  // usar throw new Error com NEXT_REDIRECT aqui exibiria branco; melhor usar URL com ?e=
-  // Quem lê esse ?e= é a página /projetos/[id]/itens (já temos tratamento lá).
-  // Revalidate antes:
-  if (pid) revalidatePath(`/projetos/${pid}/itens`);
-  // Redireciono “manual”: devolvendo erro para o componente já basta.
-  // Em server action, lançar Error com texto preserva no console e evita tela branca.
-  throw new Error(msg);
+
+  if (pid) {
+    revalidatePath(`/projetos/${pid}/itens`);
+    redirect(`/projetos/${pid}/itens?e=${encodeURIComponent(msg)}`); // <<< sem throw
+  }
+
+  redirect(`/projetos?e=${encodeURIComponent(msg)}`); // fallback
 }
 
 /* =========================
@@ -171,7 +172,8 @@ export async function adicionarItem(formData: FormData) {
     await prisma.estimativaItem.create({
       data: {
         estimativaId, produtoId, fornecedorId, unidadeId,
-        quantidade: round2(quantidade!)!,    // Decimal(12,3) aceita number
+        // quantidade é Decimal(12,3) → melhor 3 casas:
+        quantidade: Math.round((quantidade as number) * 1000) / 1000,
         fontePrecoMat: fontePrecoMat as any,
         fontePrecoMo:  fontePrecoMo  as any,
         valorUnitMat, valorUnitMo, totalItem,
@@ -245,7 +247,7 @@ export async function atualizarItem(formData: FormData) {
       where: { id },
       data: {
         fornecedorId, unidadeId,
-        quantidade: round2(quantidade!)!,
+        quantidade: Math.round((quantidade as number) * 1000) / 1000,
         fontePrecoMat: fontePrecoMat as any,
         fontePrecoMo:  fontePrecoMo  as any,
         valorUnitMat, valorUnitMo, totalItem,
