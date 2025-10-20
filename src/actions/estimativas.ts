@@ -36,14 +36,16 @@ async function getMeUsuarioId(): Promise<number> {
   return me.id; // inteiro (FK)
 }
 
+/** busca preço do vínculo fornecedor-produto */
 async function pickPrecoFromVinculo(
   fornecedorId: number,
   produtoId: number,
   fonteMat: FonteMat,
   fonteMo: FonteMo,
 ) {
-  const vinc = await prisma.fornecedorProduto.findUnique({
-    where: { fornecedorId_produtoId: { fornecedorId, produtoId } },
+  // 🔧 trocado para findFirst (mais seguro que findUnique)
+  const vinc = await prisma.fornecedorProduto.findFirst({
+    where: { fornecedorId, produtoId },
     select: {
       precoMatP1: true, precoMatP2: true, precoMatP3: true,
       precoMoM1: true,  precoMoM2: true,  precoMoM3: true,
@@ -153,7 +155,6 @@ export async function aprovarEstimativa(formData: FormData) {
 export async function adicionarItem(formData: FormData) {
   const estimativaId = Number(formData.get('estimativaId'));
   try {
-    // 🔐 resolve o usuarioId (inteiro) obrigatório no schema
     const usuarioId = await getMeUsuarioId();
 
     const produtoId    = Number(formData.get('produtoId'));
@@ -163,14 +164,11 @@ export async function adicionarItem(formData: FormData) {
     const fontePrecoMo  = (String(formData.get('fontePrecoMo')  || '') || null) as FonteMo;
     const quantidade    = parseNum(formData.get('quantidade'));
 
-    if (!estimativaId || !produtoId || !fornecedorId || !unidadeId) {
+    if (!estimativaId || !produtoId || !fornecedorId || !unidadeId)
       throw new Error('Produto, fornecedor e unidade são obrigatórios.');
-    }
-    if (quantidade == null || quantidade <= 0) {
+    if (quantidade == null || quantidade <= 0)
       throw new Error('Quantidade inválida.');
-    }
 
-    // valida FKs (mensagens amigáveis)
     const [okUM, okProd, okForn] = await Promise.all([
       prisma.unidadeMedida.findUnique({ where: { id: unidadeId }, select: { id: true } }),
       prisma.produtoServico.findUnique({ where: { id: produtoId }, select: { id: true } }),
@@ -192,8 +190,7 @@ export async function adicionarItem(formData: FormData) {
         produtoId,
         fornecedorId,
         unidadeId,
-        usuarioId, // 👈 OBRIGATÓRIO
-        // Decimal(12,3)
+        usuarioId,
         quantidade: Math.round((quantidade as number) * 1000) / 1000,
         fontePrecoMat: fontePrecoMat as any,
         fontePrecoMo:  fontePrecoMo  as any,
@@ -208,9 +205,8 @@ export async function adicionarItem(formData: FormData) {
       select: { projetoId: true },
     });
 
-    if (projeto?.projetoId) {
+    if (projeto?.projetoId)
       revalidatePath(`/projetos/${projeto.projetoId}/itens`);
-    }
   } catch (err) {
     console.error('[adicionarItem]', err);
     await backToItensWithError(estimativaId, err);
@@ -228,7 +224,8 @@ export async function excluirItem(formData: FormData) {
     });
     await prisma.estimativaItem.delete({ where: { id } });
 
-    if (est?.projetoId) revalidatePath(`/projetos/${est.projetoId}/itens`);
+    if (est?.projetoId)
+      revalidatePath(`/projetos/${est.projetoId}/itens`);
   } catch (err) {
     console.error('[excluirItem]', err);
     await backToItensWithError(estimativaId, err);
@@ -238,7 +235,6 @@ export async function excluirItem(formData: FormData) {
 export async function atualizarItem(formData: FormData) {
   const estimativaId = Number(formData.get('estimativaId'));
   try {
-    // 🔐 manter consistência de autoria no update também
     const usuarioId = await getMeUsuarioId();
 
     const id           = Number(formData.get('id'));
@@ -249,10 +245,10 @@ export async function atualizarItem(formData: FormData) {
     const fontePrecoMat = (String(formData.get('fontePrecoMat') || '') || null) as FonteMat;
     const fontePrecoMo  = (String(formData.get('fontePrecoMo')  || '') || null) as FonteMo;
 
-    if (!id || !estimativaId || !produtoId || !fornecedorId || !unidadeId) {
+    if (!id || !estimativaId || !produtoId || !fornecedorId || !unidadeId)
       throw new Error('Dados do item inválidos.');
-    }
-    if (quantidade == null || quantidade <= 0) throw new Error('Quantidade inválida.');
+    if (quantidade == null || quantidade <= 0)
+      throw new Error('Quantidade inválida.');
 
     const [okUM, okProd, okForn] = await Promise.all([
       prisma.unidadeMedida.findUnique({ where: { id: unidadeId }, select: { id: true } }),
@@ -274,7 +270,7 @@ export async function atualizarItem(formData: FormData) {
       data: {
         fornecedorId,
         unidadeId,
-        usuarioId, // 👈 garantir FK
+        usuarioId,
         quantidade: Math.round((quantidade as number) * 1000) / 1000,
         fontePrecoMat: fontePrecoMat as any,
         fontePrecoMo:  fontePrecoMo  as any,
@@ -287,7 +283,8 @@ export async function atualizarItem(formData: FormData) {
     const est = await prisma.estimativa.findUnique({
       where: { id: estimativaId }, select: { projetoId: true }
     });
-    if (est?.projetoId) revalidatePath(`/projetos/${est.projetoId}/itens`);
+    if (est?.projetoId)
+      revalidatePath(`/projetos/${est.projetoId}/itens`);
   } catch (err) {
     console.error('[atualizarItem]', err);
     await backToItensWithError(estimativaId, err);
