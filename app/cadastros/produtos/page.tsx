@@ -59,19 +59,27 @@ export default async function Page({
 }: {
   searchParams?: { e?: string; ok?: string };
 }) {
-  // Auth
-  const supabase = getSupabaseServer();
+  // Auth + "me"
+  const supabase = await getSupabaseServer(); // <= faltava await
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
+  const me = await prisma.usuario.findUnique({
+    where: { supabaseUserId: user.id },
+    select: { id: true },
+  });
+  if (!me) redirect('/login');
+
   const [unidades, produtos, vinculos] = await Promise.all([
     prisma.unidadeMedida.findMany({
+      where: { usuarioId: me.id },
       orderBy: { sigla: 'asc' },
       select: { id: true, sigla: true, nome: true },
     }),
     prisma.produtoServico.findMany({
+      where: { usuarioId: me.id },
       orderBy: [{ nome: 'asc' }],
       select: {
         id: true,
@@ -83,6 +91,7 @@ export default async function Page({
       },
     }),
     prisma.fornecedorProduto.findMany({
+      where: { usuarioId: me.id },
       include: { fornecedor: { select: { nome: true } } },
     }),
   ]);
