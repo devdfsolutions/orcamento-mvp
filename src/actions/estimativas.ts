@@ -2,7 +2,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { redirect } from 'next/navigation';   // <<< IMPORTANTE
+import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 
 /* ===== helpers ===== */
@@ -21,14 +21,16 @@ function round2(n: number | null | undefined) {
 type FonteMat = 'P1' | 'P2' | 'P3' | null;
 type FonteMo  = 'M1' | 'M2' | 'M3' | null;
 
+/** Busca os preços do vínculo fornecedor+produto conforme a fonte escolhida
+ *  Usa findFirst com filtros simples (compatível com índice único composto no schema) */
 async function pickPrecoFromVinculo(
   fornecedorId: number,
   produtoId: number,
   fonteMat: FonteMat,
   fonteMo: FonteMo,
 ) {
-  const vinc = await prisma.fornecedorProduto.findUnique({
-    where: { fornecedorId_produtoId: { fornecedorId, produtoId } },
+  const vinc = await prisma.fornecedorProduto.findFirst({
+    where: { fornecedorId, produtoId },
     select: {
       precoMatP1: true, precoMatP2: true, precoMatP3: true,
       precoMoM1: true,  precoMoM2: true,  precoMoM3: true,
@@ -50,7 +52,7 @@ async function pickPrecoFromVinculo(
   return { mat, mo };
 }
 
-/* ==== redireciona para /projetos/[pid]/itens com mensagem, sem quebrar a página ==== */
+/* ==== redireciona para /projetos/[pid]/itens com mensagem, sem tela branca ==== */
 async function backToItensWithError(estimativaId: number, err: unknown) {
   const est = await prisma.estimativa.findUnique({
     where: { id: estimativaId },
@@ -63,10 +65,9 @@ async function backToItensWithError(estimativaId: number, err: unknown) {
 
   if (pid) {
     revalidatePath(`/projetos/${pid}/itens`);
-    redirect(`/projetos/${pid}/itens?e=${encodeURIComponent(msg)}`); // <<< sem throw
+    redirect(`/projetos/${pid}/itens?e=${encodeURIComponent(msg)}`);
   }
-
-  redirect(`/projetos?e=${encodeURIComponent(msg)}`); // fallback
+  redirect(`/projetos?e=${encodeURIComponent(msg)}`);
 }
 
 /* =========================
@@ -172,7 +173,7 @@ export async function adicionarItem(formData: FormData) {
     await prisma.estimativaItem.create({
       data: {
         estimativaId, produtoId, fornecedorId, unidadeId,
-        // quantidade é Decimal(12,3) → melhor 3 casas:
+        // quantidade é Decimal(12,3)
         quantidade: Math.round((quantidade as number) * 1000) / 1000,
         fontePrecoMat: fontePrecoMat as any,
         fontePrecoMo:  fontePrecoMo  as any,
