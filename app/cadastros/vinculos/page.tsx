@@ -8,36 +8,29 @@ import InlineVinculoRow from '@/components/InlineVinculoRow';
 
 export const dynamic = 'force-dynamic';
 
-/* ===== helpers visuais (se quiser usar em algum lugar) ===== */
-function moneyShort(v: any) {
-  if (v == null) return '—';
-  const n = Number(v);
-  if (!Number.isFinite(n)) return '—';
-  return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-function dateBR(d: Date | string | null | undefined) {
-  if (!d) return '—';
-  const x = new Date(d);
-  if (isNaN(x.getTime())) return '—';
-  const dd = String(x.getDate()).padStart(2, '0');
-  const mm = String(x.getMonth() + 1).padStart(2, '0');
-  const yyyy = String(x.getFullYear());
-  return `${dd}/${mm}/${yyyy}`;
-}
-
-export default async function Page() {
-  // Auth (Server Component)
+export default async function Page({
+  searchParams,
+}: { searchParams?: { e?: string } }) {
+  // Auth
   const supabase = await getSupabaseServer();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  // Dados
+  const me = await prisma.usuario.findUnique({
+    where: { supabaseUserId: user.id },
+    select: { id: true },
+  });
+  if (!me) redirect('/login');
+
+  // Dados (somente do meu usuário)
   const [fornecedores, produtos, vinculos] = await Promise.all([
     prisma.fornecedor.findMany({
+      where: { usuarioId: me.id },
       orderBy: { nome: 'asc' },
       select: { id: true, nome: true },
     }),
     prisma.produtoServico.findMany({
+      where: { usuarioId: me.id },
       orderBy: { nome: 'asc' },
       select: {
         id: true,
@@ -46,6 +39,7 @@ export default async function Page() {
       },
     }),
     prisma.fornecedorProduto.findMany({
+      where: { usuarioId: me.id },
       orderBy: [{ produto: { nome: 'asc' } }, { fornecedor: { nome: 'asc' } }],
       include: {
         fornecedor: { select: { id: true, nome: true } },
@@ -54,11 +48,26 @@ export default async function Page() {
     }),
   ]);
 
+  const rawErr = searchParams?.e ?? null;
+  const msgErro = rawErr && rawErr !== 'NEXT_REDIRECT' ? decodeURIComponent(rawErr) : null;
+
   return (
     <main style={{ padding: 24, display: 'grid', gap: 16, maxWidth: 1400 }}>
       <h1 style={{ fontSize: 22, fontWeight: 700 }}>
         Cadastros / Vínculos Fornecedor ↔ Produto
       </h1>
+
+      {msgErro && (
+        <div style={{
+          padding: '10px 12px',
+          border: '1px solid #f1d0d0',
+          background: '#ffeaea',
+          color: '#7a0000',
+          borderRadius: 8,
+        }}>
+          {msgErro}
+        </div>
+      )}
 
       {/* Novo/Atualizar vínculo (upsert) */}
       <section style={card}>
@@ -107,7 +116,7 @@ export default async function Page() {
         </p>
       </section>
 
-      {/* Lista — colunas invertidas: Produto/Serviço → Fornecedor */}
+      {/* Lista */}
       <section>
         <table
           style={{
@@ -118,18 +127,18 @@ export default async function Page() {
           }}
         >
           <colgroup>
-            <col style={{ width: '25%' }} /> {/* Produto/Serviço */}
-            <col style={{ width: '20%' }} /> {/* Fornecedor */}
-            <col style={{ width: '10%' }} /> {/* UM */}
-            <col style={{ width: 70 }} /> {/* P1 */}
-            <col style={{ width: 70 }} /> {/* P2 */}
-            <col style={{ width: 70 }} /> {/* P3 */}
-            <col style={{ width: 70 }} /> {/* M1 */}
-            <col style={{ width: 70 }} /> {/* M2 */}
-            <col style={{ width: 70 }} /> {/* M3 */}
-            <col style={{ width: '20%' }} /> {/* Atualização */}
-            <col style={{ width: '15%' }} /> {/* Obs */}
-            <col style={{ width: '12%' }} /> {/* Ações */}
+            <col style={{ width: '25%' }} />
+            <col style={{ width: '20%' }} />
+            <col style={{ width: '10%' }} />
+            <col style={{ width: 70 }} />
+            <col style={{ width: 70 }} />
+            <col style={{ width: 70 }} />
+            <col style={{ width: 70 }} />
+            <col style={{ width: 70 }} />
+            <col style={{ width: 70 }} />
+            <col style={{ width: '20%' }} />
+            <col style={{ width: '15%' }} />
+            <col style={{ width: '12%' }} />
           </colgroup>
 
           <thead>
@@ -151,17 +160,15 @@ export default async function Page() {
 
           <tbody>
             {vinculos.map((v) => {
-              // garante number para decimais do Prisma (Decimal)
               const safeV = {
                 ...v,
-                precoMatP1: v.precoMatP1 ? Number(v.precoMatP1) : null,
-                precoMatP2: v.precoMatP2 ? Number(v.precoMatP2) : null,
-                precoMatP3: v.precoMatP3 ? Number(v.precoMatP3) : null,
-                precoMoM1: v.precoMoM1 ? Number(v.precoMoM1) : null,
-                precoMoM2: v.precoMoM2 ? Number(v.precoMoM2) : null,
-                precoMoM3: v.precoMoM3 ? Number(v.precoMoM3) : null,
+                precoMatP1: v.precoMatP1 != null ? Number(v.precoMatP1) : null,
+                precoMatP2: v.precoMatP2 != null ? Number(v.precoMatP2) : null,
+                precoMatP3: v.precoMatP3 != null ? Number(v.precoMatP3) : null,
+                precoMoM1: v.precoMoM1 != null ? Number(v.precoMoM1) : null,
+                precoMoM2: v.precoMoM2 != null ? Number(v.precoMoM2) : null,
+                precoMoM3: v.precoMoM3 != null ? Number(v.precoMoM3) : null,
               };
-
               return (
                 <InlineVinculoRow
                   key={v.id}
@@ -171,11 +178,8 @@ export default async function Page() {
                 />
               );
             })}
-
             {vinculos.length === 0 && (
-              <tr>
-                <td style={td} colSpan={12}>Nenhum vínculo cadastrado.</td>
-              </tr>
+              <tr><td style={td} colSpan={12}>Nenhum vínculo cadastrado.</td></tr>
             )}
           </tbody>
         </table>
@@ -184,44 +188,10 @@ export default async function Page() {
   );
 }
 
-/* ===== estilos inline ===== */
-const card: React.CSSProperties = {
-  padding: 12,
-  border: "1px solid #eee",
-  borderRadius: 8,
-  background: "#fff",
-};
+/* estilos */
+const card: React.CSSProperties = { padding: 12, border: '1px solid #eee', borderRadius: 8, background: '#fff' };
 const h2: React.CSSProperties = { fontSize: 16, margin: '0 0 10px' };
-const th: React.CSSProperties = {
-  textAlign: 'left',
-  padding: 10,
-  borderBottom: '1px solid #eee',
-  background: '#fafafa',
-  fontWeight: 600,
-  whiteSpace: 'normal',
-};
-const td: React.CSSProperties = {
-  padding: 10,
-  borderBottom: '1px solid #f2f2f2',
-  verticalAlign: 'top',
-  wordBreak: 'word-break',
-  overflowWrap: 'anywhere',
-};
-const input: React.CSSProperties = {
-  height: 36,
-  padding: '0 10px',
-  border: '1px solid #ddd',
-  borderRadius: 8,
-  outline: 'none',
-  width: '100%',
-  boxSizing: 'border-box',
-};
-const btn: React.CSSProperties = {
-  height: 36,
-  padding: '0 14px',
-  borderRadius: 8,
-  border: '1px solid #ddd',
-  background: '#111',
-  color: '#fff',
-  cursor: 'pointer',
-};
+const th: React.CSSProperties = { textAlign: 'left', padding: 10, borderBottom: '1px solid #eee', background: '#fafafa', fontWeight: 600, whiteSpace: 'normal' };
+const td: React.CSSProperties = { padding: 10, borderBottom: '1px solid #f2f2f2', verticalAlign: 'top', wordBreak: 'break-word', overflowWrap: 'anywhere' };
+const input: React.CSSProperties = { height: 36, padding: '0 10px', border: '1px solid #ddd', borderRadius: 8, outline: 'none', width: '100%', boxSizing: 'border-box' };
+const btn: React.CSSProperties = { height: 36, padding: '0 14px', borderRadius: 8, border: '1px solid #ddd', background: '#111', color: '#fff', cursor: 'pointer' };
