@@ -1,11 +1,13 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
+import { getSupabaseServer } from '@/lib/supabaseServer';
 
 const PAGE = '/cadastros/vinculos';
 
-/* Helpers */
+/* Helpers numéricos/datas */
 function parseMoney(v: FormDataEntryValue | null): number | null {
   if (v == null) return null;
   const s = String(v).trim();
@@ -29,30 +31,61 @@ function parseDateISO(v: FormDataEntryValue | null): Date {
   return isNaN(d.getTime()) ? new Date() : d;
 }
 
+/** Descobre o meu usuarioId a partir do Supabase */
+async function getMeuUsuarioId(): Promise<number> {
+  const supabase = await getSupabaseServer();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Sessão expirada. Faça login novamente.');
+  const me = await prisma.usuario.findUnique({
+    where: { supabaseUserId: user.id },
+    select: { id: true },
+  });
+  if (!me) throw new Error('Usuário não encontrado.');
+  return me.id;
+}
+
 /** UPSERT (Cria ou Atualiza) */
 export async function upsertVinculo(formData: FormData) {
   try {
+    const usuarioId = await getMeuUsuarioId();
+
     const fornecedorId = Number(formData.get('fornecedorId'));
-    const produtoId = Number(formData.get('produtoId'));
-    if (!fornecedorId || !produtoId)
+    const produtoId    = Number(formData.get('produtoId'));
+    if (!Number.isFinite(fornecedorId) || !Number.isFinite(produtoId)) {
       throw new Error('Fornecedor e Produto são obrigatórios.');
+    }
+
+    // garante que fornecedor e produto pertencem ao mesmo usuário
+    const [forn, prod] = await Promise.all([
+      prisma.fornecedor.findUnique({ where: { id: fornecedorId }, select: { usuarioId: true } }),
+      prisma.produtoServico.findUnique({ where: { id: produtoId }, select: { usuarioId: true } }),
+    ]);
+    if (!forn || forn.usuarioId !== usuarioId) throw new Error('Fornecedor inválido.');
+    if (!prod || prod.usuarioId !== usuarioId) throw new Error('Produto/serviço inválido.');
 
     const precoMatP1 = r2(parseMoney(formData.get('precoMatP1')));
     const precoMatP2 = r2(parseMoney(formData.get('precoMatP2')));
     const precoMatP3 = r2(parseMoney(formData.get('precoMatP3')));
-    const precoMoM1 = r2(parseMoney(formData.get('precoMoM1')));
-    const precoMoM2 = r2(parseMoney(formData.get('precoMoM2')));
-    const precoMoM3 = r2(parseMoney(formData.get('precoMoM3')));
+    const precoMoM1  = r2(parseMoney(formData.get('precoMoM1')));
+    const precoMoM2  = r2(parseMoney(formData.get('precoMoM2')));
+    const precoMoM3  = r2(parseMoney(formData.get('precoMoM3')));
 
     const dataUltAtual = parseDateISO(formData.get('dataUltAtual'));
-    const observacao =
-      (String(formData.get('observacao') ?? '').trim() || null) as string | null;
+    const observacao   = (String(formData.get('observacao') ?? '').trim() || null) as string | null;
 
     const now = new Date();
 
     await prisma.fornecedorProduto.upsert({
-      where: { fornecedorId_produtoId: { fornecedorId, produtoId } },
+      // 👉 usa a chave única correta
+      where: {
+        usuarioId_fornecedorId_produtoId: {
+          usuarioId,
+          fornecedorId,
+          produtoId,
+        },
+      },
       create: {
+        usuarioId,
         fornecedorId,
         produtoId,
         precoMatP1,
@@ -65,7 +98,7 @@ export async function upsertVinculo(formData: FormData) {
         observacao,
         createdAt: now,
         updatedAt: now,
-      } as any,
+      },
       update: {
         precoMatP1,
         precoMatP2,
@@ -76,28 +109,38 @@ export async function upsertVinculo(formData: FormData) {
         dataUltAtual,
         observacao,
         updatedAt: now,
-      } as any,
+      },
     });
 
     revalidatePath(PAGE);
-    return { ok: true };
+    redirect(PAGE);
   } catch (err) {
-    console.error('[vinculos action]', err);
-    return { ok: false, message: (err as any)?.message ?? 'Erro ao salvar.' };
+    console.error('[vinculos upsert]', err);
+    // devolve mensagem via query param (mantém padrão das outras telas)
+    const msg =
+      (err as any)?.message ?? 'Erro ao salvar vínculo.';
+    redirect(`${PAGE}?e=${encodeURIComponent(msg)}`);
   }
 }
 
 /** EXCLUIR VÍNCULO */
 export async function excluirVinculo(formData: FormData) {
   try {
+    const usuarioId = await getMeuUsuarioId();
     const id = Number(formData.get('id'));
-    if (!id) throw new Error('ID inválido');
+    if (!Number.isFinite(id)) throw new Error('ID inválido');
 
-    await prisma.fornecedorProduto.delete({ where: { id } });
+    // segurança: só apaga se o vínculo é meu
+    await prisma.fornecedorProduto.delete({
+      where: { id, usuarioId },
+    });
+
     revalidatePath(PAGE);
-    return { ok: true };
+    redirect(PAGE);
   } catch (err) {
     console.error('[vinculos delete]', err);
-    return { ok: false, message: (err as any)?.message ?? 'Erro ao excluir.' };
+    const msg =
+      (err as any)?.message ?? 'Erro ao excluir vínculo.';
+    redirect(`${PAGE}?e=${encodeURIComponent(msg)}`);
   }
 }
