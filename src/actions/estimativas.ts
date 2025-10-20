@@ -4,6 +4,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
+import { getSupabaseServer } from '@/lib/supabaseServer';
 
 /* ===== helpers ===== */
 function parseNum(v: FormDataEntryValue | null): number | null {
@@ -21,16 +22,28 @@ function round2(n: number | null | undefined) {
 type FonteMat = 'P1' | 'P2' | 'P3' | null;
 type FonteMo  = 'M1' | 'M2' | 'M3' | null;
 
-/** Busca os preços do vínculo fornecedor+produto conforme a fonte escolhida
- *  Usa findFirst com filtros simples (compatível com índice único composto no schema) */
+/** resolve o Usuario interno (id inteiro) a partir do Supabase */
+async function getMeUsuarioId(): Promise<number> {
+  const supabase = await getSupabaseServer();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Usuário não autenticado.');
+
+  const me = await prisma.usuario.findUnique({
+    where: { supabaseUserId: user.id },
+    select: { id: true },
+  });
+  if (!me) throw new Error('Usuário da aplicação não encontrado.');
+  return me.id; // inteiro (FK)
+}
+
 async function pickPrecoFromVinculo(
   fornecedorId: number,
   produtoId: number,
   fonteMat: FonteMat,
   fonteMo: FonteMo,
 ) {
-  const vinc = await prisma.fornecedorProduto.findFirst({
-    where: { fornecedorId, produtoId },
+  const vinc = await prisma.fornecedorProduto.findUnique({
+    where: { fornecedorId_produtoId: { fornecedorId, produtoId } },
     select: {
       precoMatP1: true, precoMatP2: true, precoMatP3: true,
       precoMoM1: true,  precoMoM2: true,  precoMoM3: true,
@@ -52,7 +65,7 @@ async function pickPrecoFromVinculo(
   return { mat, mo };
 }
 
-/* ==== redireciona para /projetos/[pid]/itens com mensagem, sem tela branca ==== */
+/* ==== redireciona para /projetos/[pid]/itens com mensagem, sem quebrar a página ==== */
 async function backToItensWithError(estimativaId: number, err: unknown) {
   const est = await prisma.estimativa.findUnique({
     where: { id: estimativaId },
@@ -140,6 +153,9 @@ export async function aprovarEstimativa(formData: FormData) {
 export async function adicionarItem(formData: FormData) {
   const estimativaId = Number(formData.get('estimativaId'));
   try {
+    // 🔐 resolve o usuarioId (inteiro) obrigatório no schema
+    const usuarioId = await getMeUsuarioId();
+
     const produtoId    = Number(formData.get('produtoId'));
     const fornecedorId = Number(formData.get('fornecedorId'));
     const unidadeId    = Number(formData.get('unidadeId'));
@@ -172,12 +188,18 @@ export async function adicionarItem(formData: FormData) {
 
     await prisma.estimativaItem.create({
       data: {
-        estimativaId, produtoId, fornecedorId, unidadeId,
-        // quantidade é Decimal(12,3)
+        estimativaId,
+        produtoId,
+        fornecedorId,
+        unidadeId,
+        usuarioId, // 👈 OBRIGATÓRIO
+        // Decimal(12,3)
         quantidade: Math.round((quantidade as number) * 1000) / 1000,
         fontePrecoMat: fontePrecoMat as any,
         fontePrecoMo:  fontePrecoMo  as any,
-        valorUnitMat, valorUnitMo, totalItem,
+        valorUnitMat,
+        valorUnitMo,
+        totalItem,
       },
     });
 
@@ -216,6 +238,9 @@ export async function excluirItem(formData: FormData) {
 export async function atualizarItem(formData: FormData) {
   const estimativaId = Number(formData.get('estimativaId'));
   try {
+    // 🔐 manter consistência de autoria no update também
+    const usuarioId = await getMeUsuarioId();
+
     const id           = Number(formData.get('id'));
     const produtoId    = Number(formData.get('produtoId'));
     const fornecedorId = Number(formData.get('fornecedorId'));
@@ -247,11 +272,15 @@ export async function atualizarItem(formData: FormData) {
     await prisma.estimativaItem.update({
       where: { id },
       data: {
-        fornecedorId, unidadeId,
+        fornecedorId,
+        unidadeId,
+        usuarioId, // 👈 garantir FK
         quantidade: Math.round((quantidade as number) * 1000) / 1000,
         fontePrecoMat: fontePrecoMat as any,
         fontePrecoMo:  fontePrecoMo  as any,
-        valorUnitMat, valorUnitMo, totalItem,
+        valorUnitMat,
+        valorUnitMo,
+        totalItem,
       },
     });
 
