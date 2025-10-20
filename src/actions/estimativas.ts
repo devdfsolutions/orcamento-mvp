@@ -1,10 +1,8 @@
-// /actions/estimativas.ts
+// src/actions/estimativas.ts
 'use server';
 
 import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/prisma';
-import { getSupabaseServer } from '@/lib/supabaseServer';
-import { redirect } from 'next/navigation';
 
 /* ===== helpers ===== */
 function parseNum(v: FormDataEntryValue | null): number | null {
@@ -22,20 +20,6 @@ function round2(n: number | null | undefined) {
 type FonteMat = 'P1' | 'P2' | 'P3' | null;
 type FonteMo  = 'M1' | 'M2' | 'M3' | null;
 
-/** Descobre o meu usuarioId via Supabase → tabela Usuario */
-async function getMeuUsuarioId(): Promise<number> {
-  const supabase = await getSupabaseServer();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Faça login.');
-  const me = await prisma.usuario.findUnique({
-    where: { supabaseUserId: user.id },
-    select: { id: true },
-  });
-  if (!me) throw new Error('Usuário não encontrado.');
-  return me.id;
-}
-
-/** Busca os preços do vínculo fornecedor+produto conforme a fonte escolhida */
 async function pickPrecoFromVinculo(
   fornecedorId: number,
   produtoId: number,
@@ -65,79 +49,61 @@ async function pickPrecoFromVinculo(
   return { mat, mo };
 }
 
+/* util: volta para /projetos/[id]/itens com msg de erro */
+async function backToItensWithError(estimativaId: number, err: unknown) {
+  const est = await prisma.estimativa.findUnique({
+    where: { id: estimativaId },
+    select: { projetoId: true },
+  });
+  const pid = est?.projetoId;
+  const msg =
+    (err as any)?.message ??
+    (typeof err === 'string' ? err : 'Falha ao salvar o item.');
+  // usar throw new Error com NEXT_REDIRECT aqui exibiria branco; melhor usar URL com ?e=
+  // Quem lê esse ?e= é a página /projetos/[id]/itens (já temos tratamento lá).
+  // Revalidate antes:
+  if (pid) revalidatePath(`/projetos/${pid}/itens`);
+  // Redireciono “manual”: devolvendo erro para o componente já basta.
+  // Em server action, lançar Error com texto preserva no console e evita tela branca.
+  throw new Error(msg);
+}
+
 /* =========================
  * PROJETOS
  * ========================= */
 
 export async function criarProjeto(formData: FormData) {
-  const usuarioId = await getMeuUsuarioId();
-
   const nome = String(formData.get('nome') ?? '').trim();
   if (!nome) throw new Error('Informe o nome do projeto');
 
   const clienteIdRaw = String(formData.get('clienteId') ?? '').trim();
   const clienteId = clienteIdRaw ? Number(clienteIdRaw) : null;
 
-  // valida clienteId (se vier) — precisa ser do mesmo usuário
-  if (clienteId) {
-    const cli = await prisma.clienteUsuario.findUnique({
-      where: { id: clienteId },
-      select: { usuarioId: true },
-    });
-    if (!cli || cli.usuarioId !== usuarioId) {
-      throw new Error('Cliente inválido para este usuário.');
-    }
-  }
-
   await prisma.projeto.create({
-    data: {
-      usuarioId,
-      nome,
-      clienteId: clienteId ?? undefined,
-    },
+    data: { nome, clienteId: clienteId ?? undefined, status: 'rascunho' },
   });
 
   revalidatePath('/projetos');
-  redirect('/projetos?ok=1');
 }
 
-/** Cria o projeto e devolve o ID (para redirecionar no "wizard") */
 export async function criarProjetoAndGo(formData: FormData) {
-  const usuarioId = await getMeuUsuarioId();
-
   const nome = String(formData.get('nome') ?? '').trim();
   if (!nome) throw new Error('Informe o nome do projeto');
 
   const clienteIdRaw = String(formData.get('clienteId') ?? '').trim();
   const clienteId = clienteIdRaw ? Number(clienteIdRaw) : null;
 
-  if (clienteId) {
-    const cli = await prisma.clienteUsuario.findUnique({
-      where: { id: clienteId },
-      select: { usuarioId: true },
-    });
-    if (!cli || cli.usuarioId !== usuarioId) {
-      throw new Error('Cliente inválido para este usuário.');
-    }
-  }
-
   const novo = await prisma.projeto.create({
-    data: {
-      usuarioId,
-      nome,
-      clienteId: clienteId ?? undefined,
-    },
+    data: { nome, clienteId: clienteId ?? undefined, status: 'rascunho' },
     select: { id: true },
   });
 
-  // garante a primeira estimativa
   await ensureEstimativa(novo.id);
 
   revalidatePath('/projetos');
   return { id: novo.id };
 }
 
-/** Garante uma estimativa (pega a primeira ou cria) e devolve o id */
 export async function ensureEstimativa(projetoId: number): Promise<number> {
   const e = await prisma.estimativa.findFirst({ where: { projetoId } });
   if (e) return e.id;
@@ -166,114 +132,132 @@ export async function aprovarEstimativa(formData: FormData) {
 }
 
 /* =========================
- * ITENS DA ESTIMATIVA
+ * ITENS
  * ========================= */
 
 export async function adicionarItem(formData: FormData) {
   const estimativaId = Number(formData.get('estimativaId'));
-  const produtoId    = Number(formData.get('produtoId'));
-  const fornecedorId = Number(formData.get('fornecedorId'));
-  const unidadeId    = Number(formData.get('unidadeId'));
-  const fontePrecoMat = (String(formData.get('fontePrecoMat') || '') || null) as FonteMat;
-  const fontePrecoMo  = (String(formData.get('fontePrecoMo')  || '') || null) as FonteMo;
-  const quantidade    = parseNum(formData.get('quantidade'));
+  try {
+    const produtoId    = Number(formData.get('produtoId'));
+    const fornecedorId = Number(formData.get('fornecedorId'));
+    const unidadeId    = Number(formData.get('unidadeId'));
+    const fontePrecoMat = (String(formData.get('fontePrecoMat') || '') || null) as FonteMat;
+    const fontePrecoMo  = (String(formData.get('fontePrecoMo')  || '') || null) as FonteMo;
+    const quantidade    = parseNum(formData.get('quantidade'));
 
-  if (!estimativaId || !produtoId || !fornecedorId || !unidadeId) throw new Error('Dados do item inválidos');
-  if (quantidade == null || quantidade <= 0) throw new Error('Quantidade inválida');
+    if (!estimativaId || !produtoId || !fornecedorId || !unidadeId) {
+      throw new Error('Produto, fornecedor e unidade são obrigatórios.');
+    }
+    if (quantidade == null || quantidade <= 0) {
+      throw new Error('Quantidade inválida.');
+    }
 
-  const { mat, mo } = await pickPrecoFromVinculo(fornecedorId, produtoId, fontePrecoMat, fontePrecoMo);
+    // valida FKs (mensagens amigáveis)
+    const [okUM, okProd, okForn] = await Promise.all([
+      prisma.unidadeMedida.findUnique({ where: { id: unidadeId }, select: { id: true } }),
+      prisma.produtoServico.findUnique({ where: { id: produtoId }, select: { id: true } }),
+      prisma.fornecedor.findUnique({ where: { id: fornecedorId }, select: { id: true } }),
+    ]);
+    if (!okUM)   throw new Error('Unidade de medida não encontrada.');
+    if (!okProd) throw new Error('Produto/serviço não encontrado.');
+    if (!okForn) throw new Error('Fornecedor não encontrado.');
 
-  const valorUnitMat = round2(mat);
-  const valorUnitMo  = round2(mo);
-  const totalItem    = round2((quantidade ?? 0) * ((valorUnitMat ?? 0) + (valorUnitMo ?? 0)));
+    const { mat, mo } = await pickPrecoFromVinculo(fornecedorId, produtoId, fontePrecoMat, fontePrecoMo);
 
-  await prisma.estimativaItem.create({
-    data: {
-      estimativaId, produtoId, fornecedorId, unidadeId,
-      quantidade: round2(quantidade!)!,    // Decimal(12,3) aceita number
-      fontePrecoMat: fontePrecoMat as any,
-      fontePrecoMo:  fontePrecoMo  as any,
-      valorUnitMat, valorUnitMo, totalItem,
-    },
-  });
+    const valorUnitMat = round2(mat);
+    const valorUnitMo  = round2(mo);
+    const totalItem    = round2((quantidade ?? 0) * ((valorUnitMat ?? 0) + (valorUnitMo ?? 0)));
 
-  const projeto = await prisma.estimativa.findUnique({
-    where: { id: estimativaId },
-    select: { projetoId: true },
-  });
+    await prisma.estimativaItem.create({
+      data: {
+        estimativaId, produtoId, fornecedorId, unidadeId,
+        quantidade: round2(quantidade!)!,    // Decimal(12,3) aceita number
+        fontePrecoMat: fontePrecoMat as any,
+        fontePrecoMo:  fontePrecoMo  as any,
+        valorUnitMat, valorUnitMo, totalItem,
+      },
+    });
 
-  revalidatePath(`/projetos/${projeto?.projetoId}/itens`);
+    const projeto = await prisma.estimativa.findUnique({
+      where: { id: estimativaId },
+      select: { projetoId: true },
+    });
+
+    if (projeto?.projetoId) {
+      revalidatePath(`/projetos/${projeto.projetoId}/itens`);
+    }
+  } catch (err) {
+    console.error('[adicionarItem]', err);
+    await backToItensWithError(estimativaId, err);
+  }
 }
 
 export async function excluirItem(formData: FormData) {
-  const id = Number(formData.get('id'));
   const estimativaId = Number(formData.get('estimativaId'));
-  if (!id || !estimativaId) throw new Error('Item inválido');
+  try {
+    const id = Number(formData.get('id'));
+    if (!id || !estimativaId) throw new Error('Item inválido');
 
-  const est = await prisma.estimativa.findUnique({ where: { id: estimativaId }, select: { projetoId: true } });
-  await prisma.estimativaItem.delete({ where: { id } });
+    const est = await prisma.estimativa.findUnique({
+      where: { id: estimativaId }, select: { projetoId: true }
+    });
+    await prisma.estimativaItem.delete({ where: { id } });
 
-  revalidatePath(`/projetos/${est?.projetoId}/itens`);
+    if (est?.projetoId) revalidatePath(`/projetos/${est.projetoId}/itens`);
+  } catch (err) {
+    console.error('[excluirItem]', err);
+    await backToItensWithError(estimativaId, err);
+  }
 }
 
-/** Atualizar item existente (recalcula valores) */
 export async function atualizarItem(formData: FormData) {
-  const id           = Number(formData.get('id'));
   const estimativaId = Number(formData.get('estimativaId'));
-  const produtoId    = Number(formData.get('produtoId'));
-  const fornecedorId = Number(formData.get('fornecedorId'));
-  const unidadeId    = Number(formData.get('unidadeId'));
-  const quantidade   = parseNum(formData.get('quantidade'));
-  const fontePrecoMat = (String(formData.get('fontePrecoMat') || '') || null) as FonteMat;
-  const fontePrecoMo  = (String(formData.get('fontePrecoMo')  || '') || null) as FonteMo;
+  try {
+    const id           = Number(formData.get('id'));
+    const produtoId    = Number(formData.get('produtoId'));
+    const fornecedorId = Number(formData.get('fornecedorId'));
+    const unidadeId    = Number(formData.get('unidadeId'));
+    const quantidade   = parseNum(formData.get('quantidade'));
+    const fontePrecoMat = (String(formData.get('fontePrecoMat') || '') || null) as FonteMat;
+    const fontePrecoMo  = (String(formData.get('fontePrecoMo')  || '') || null) as FonteMo;
 
-  if (!id || !estimativaId || !produtoId || !fornecedorId || !unidadeId) throw new Error('Dados do item inválidos');
-  if (quantidade == null || quantidade <= 0) throw new Error('Quantidade inválida');
+    if (!id || !estimativaId || !produtoId || !fornecedorId || !unidadeId) {
+      throw new Error('Dados do item inválidos.');
+    }
+    if (quantidade == null || quantidade <= 0) throw new Error('Quantidade inválida.');
 
-  const { mat, mo } = await pickPrecoFromVinculo(fornecedorId, produtoId, fontePrecoMat, fontePrecoMo);
+    const [okUM, okProd, okForn] = await Promise.all([
+      prisma.unidadeMedida.findUnique({ where: { id: unidadeId }, select: { id: true } }),
+      prisma.produtoServico.findUnique({ where: { id: produtoId }, select: { id: true } }),
+      prisma.fornecedor.findUnique({ where: { id: fornecedorId }, select: { id: true } }),
+    ]);
+    if (!okUM)   throw new Error('Unidade de medida não encontrada.');
+    if (!okProd) throw new Error('Produto/serviço não encontrado.');
+    if (!okForn) throw new Error('Fornecedor não encontrado.');
 
-  const valorUnitMat = round2(mat);
-  const valorUnitMo  = round2(mo);
-  const totalItem    = round2((quantidade ?? 0) * ((valorUnitMat ?? 0) + (valorUnitMo ?? 0)));
+    const { mat, mo } = await pickPrecoFromVinculo(fornecedorId, produtoId, fontePrecoMat, fontePrecoMo);
 
-  await prisma.estimativaItem.update({
-    where: { id },
-    data: {
-      fornecedorId, unidadeId,
-      quantidade: round2(quantidade!)!,
-      fontePrecoMat: fontePrecoMat as any,
-      fontePrecoMo:  fontePrecoMo  as any,
-      valorUnitMat, valorUnitMo, totalItem,
-    },
-  });
+    const valorUnitMat = round2(mat);
+    const valorUnitMo  = round2(mo);
+    const totalItem    = round2((quantidade ?? 0) * ((valorUnitMat ?? 0) + (valorUnitMo ?? 0)));
 
-  const est = await prisma.estimativa.findUnique({
-    where: { id: estimativaId },
-    select: { projetoId: true },
-  });
+    await prisma.estimativaItem.update({
+      where: { id },
+      data: {
+        fornecedorId, unidadeId,
+        quantidade: round2(quantidade!)!,
+        fontePrecoMat: fontePrecoMat as any,
+        fontePrecoMo:  fontePrecoMo  as any,
+        valorUnitMat, valorUnitMo, totalItem,
+      },
+    });
 
-  revalidatePath(`/projetos/${est?.projetoId}/itens`);
-}
-
-/** Atualiza nome e/ou cliente do projeto */
-export async function atualizarProjeto(formData: FormData) {
-  const projetoId = Number(formData.get('projetoId'));
-  if (!projetoId) throw new Error('Projeto inválido');
-
-  const nome = String(formData.get('nome') ?? '').trim();
-
-  // clienteId: "" => null (remove); número => atualiza
-  const clienteIdRaw = String(formData.get('clienteId') ?? '').trim();
-  const clienteId = clienteIdRaw ? Number(clienteIdRaw) : null;
-
-  await prisma.projeto.update({
-    where: { id: projetoId },
-    data: {
-      ...(nome ? { nome } : {}),
-      clienteId,
-    },
-  });
-
-  revalidatePath(`/projetos/${projetoId}/itens`);
-  revalidatePath('/projetos');
+    const est = await prisma.estimativa.findUnique({
+      where: { id: estimativaId }, select: { projetoId: true }
+    });
+    if (est?.projetoId) revalidatePath(`/projetos/${est.projetoId}/itens`);
+  } catch (err) {
+    console.error('[atualizarItem]', err);
+    await backToItensWithError(estimativaId, err);
+  }
 }
