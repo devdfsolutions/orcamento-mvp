@@ -1,8 +1,11 @@
 // app/projetos/[id]/financeiro/page.tsx
 import { prisma } from '@/lib/prisma';
-import { salvarResumoFinanceiro } from '@/actions/financeiro';
+import {
+  salvarResumoFinanceiro,
+  aplicarHonorarios,
+  gerarPdfApresentacao,
+} from '@/actions/financeiro';
 import FinanceiroTabela from '@/components/FinanceiroTabela';
-import { revalidatePath } from 'next/cache';
 
 type Props = { params: { id: string } };
 
@@ -15,7 +18,7 @@ function toNum(v: any, fallback = 0): number {
 
 async function getBaseFinanceiro(projetoId: number) {
   try {
-    // Estimativa aprovada + itens (usando nomes reais do schema)
+    // Estimativa aprovada + itens (nomes reais do schema)
     const estimativa = await prisma.estimativa.findFirst({
       where: { projetoId, aprovada: true },
       include: {
@@ -260,14 +263,7 @@ export default async function Page({ params }: Props) {
       {/* HONORÁRIOS */}
       <section className="space-y-2">
         <h2 className="text-lg font-semibold">Honorários / Consultoria</h2>
-        <form
-          action={async (formData) => {
-            const { aplicarHonorarios } = await import('@/actions/financeiro');
-            await aplicarHonorarios(formData);
-            revalidatePath(`/projetos/${projetoId}/financeiro`);
-          }}
-          className="flex items-end gap-8"
-        >
+        <form action={aplicarHonorarios} className="flex items-end gap-8">
           <input type="hidden" name="projetoId" value={projetoId} />
           <input type="hidden" name="usuarioId" value={usuarioId} />
           <div>
@@ -301,13 +297,7 @@ export default async function Page({ params }: Props) {
       {/* PDF */}
       <section className="space-y-2">
         <h2 className="text-lg font-semibold">Apresentação ao cliente</h2>
-        <form
-          action={async (formData) => {
-            const { gerarPdfApresentacao } = await import('@/actions/financeiro');
-            await gerarPdfApresentacao(formData);
-          }}
-          className="flex items-center gap-4"
-        >
+        <form action={gerarPdfApresentacao} className="flex items-center gap-4">
           <input type="hidden" name="projetoId" value={projetoId} />
           <button
             type="submit"
