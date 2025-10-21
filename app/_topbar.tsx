@@ -139,12 +139,12 @@ export default function Topbar() {
           <button style={btnStyle} onClick={() => setOpen(false)} aria-label="Fechar menu">✕</button>
         </div>
         <nav style={navWrap}>
-          <Link href="/projetos" style={menuLink} onClick={() => setOpen(false)}>📁 Projetos</Link>
           <Link href="/cadastros/clientes" style={menuLink} onClick={() => setOpen(false)}>👤 Clientes</Link>
+          <Link href="/cadastros/unidades" style={menuLink} onClick={() => setOpen(false)}>⚙️ Unidades</Link>
           <Link href="/cadastros/produtos" style={menuLink} onClick={() => setOpen(false)}>🧱 Produtos & Serviços</Link>
           <Link href="/cadastros/fornecedores" style={menuLink} onClick={() => setOpen(false)}>🚚 Fornecedores</Link>
-          <Link href="/cadastros/unidades" style={menuLink} onClick={() => setOpen(false)}>⚙️ Unidades</Link>
           <Link href="/cadastros/vinculos" style={menuLink} onClick={() => setOpen(false)}>🔗 Vínculos</Link>
+          <Link href="/projetos" style={menuLink} onClick={() => setOpen(false)}>📁 Projetos</Link>   
         </nav>
       </aside>
     </>
