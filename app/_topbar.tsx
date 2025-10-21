@@ -140,7 +140,7 @@ export default function Topbar() {
         </div>
         <nav style={navWrap}>
           <Link href="/cadastros/clientes" style={menuLink} onClick={() => setOpen(false)}>👤 Clientes</Link>
-          <Link href="/cadastros/unidades" style={menuLink} onClick={() => setOpen(false)}>⚙️ Unidades</Link>
+          <Link href="/cadastros/unidades" style={menuLink} onClick={() => setOpen(false)}>⚙️ Medidas</Link>
           <Link href="/cadastros/produtos" style={menuLink} onClick={() => setOpen(false)}>🧱 Produtos & Serviços</Link>
           <Link href="/cadastros/fornecedores" style={menuLink} onClick={() => setOpen(false)}>🚚 Fornecedores</Link>
           <Link href="/cadastros/vinculos" style={menuLink} onClick={() => setOpen(false)}>🔗 Vínculos</Link>
