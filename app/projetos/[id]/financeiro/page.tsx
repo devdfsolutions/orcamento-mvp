@@ -1,164 +1,133 @@
-// src/app/projetos/[id]/financeiro/page.tsx
-import { notFound } from "next/navigation";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+// app/projetos/[id]/financeiro/page.tsx
+import { prisma } from '@/lib/prisma';
+import { salvarResumoFinanceiro } from '@/actions/financeiro';
 
-// (stubs) actions novas — implementar de fato em src/actions/financeiro.ts
-import {
-  getFinanceiroData,
-  salvarObservacaoFinanceiro,
-  aplicarHonorariosEmMemoria, // não persiste orçamento, só calcula no resumo
-  gerarPdfApresentacaoCliente,
-} from "@/actions/financeiro";
+type Props = { params: { id: string } };
 
-// (stubs) componentes novos — implementar de fato em src/components/*
-import FinanceiroTabela from "@/components/FinanceiroTabela";
-import FinanceiroResumo from "@/components/FinanceiroResumo";
+async function getDados(projetoId: number) {
+  // 1) estimativa aprovada + itens
+  const estimativaAprovada = await prisma.estimativa.findFirst({
+    where: { projetoId, aprovada: true },
+    include: {
+      itens: {
+        select: { totalItem: true },
+      },
+    },
+  });
 
-type PageProps = {
-  params: { id: string };
-  searchParams: Record<string, string | string[] | undefined>;
-};
+  const aPagar =
+    estimativaAprovada?.itens.reduce((acc, i) => acc + Number(i.totalItem || 0), 0) || 0;
 
-export const dynamic = "force-dynamic";
+  // 2) resumo (recebemos/observacoes)
+  const resumo = await prisma.resumoProjeto.findUnique({
+    where: { projetoId },
+  });
 
-export default async function FinanceiroProjetoPage({ params }: PageProps) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) notFound();
+  return {
+    aPagar,
+    recebemos: Number(resumo?.recebemos || 0),
+    observacoes: resumo?.observacoes || '',
+    temEstimativaAprovada: !!estimativaAprovada,
+  };
+}
 
+export default async function Page({ params }: Props) {
   const projetoId = Number(params.id);
-  if (Number.isNaN(projetoId)) notFound();
+  const { aPagar, recebemos, observacoes, temEstimativaAprovada } =
+    await getDados(projetoId);
 
-  // Carrega view-model do financeiro (sem alterar o orçamento original)
-  // Essa action deve buscar:
-  // - projeto, totais (recebido, a pagar, lucro)
-  // - observacao atual do financeiro
-  // - itens da estimativa aprovada (produtos/serviços) + ajustes existentes (FinanceiroAjuste)
-  const vm = await getFinanceiroData(projetoId, Number(session.user.id));
-
-  if (!vm?.projeto) notFound();
-
-  // Helpers para formulários server actions
-  async function salvarObservacao(formData: FormData) {
-    "use server";
-    await salvarObservacaoFinanceiro({
-      projetoId,
-      observacao: (formData.get("observacao") as string) ?? "",
-      usuarioId: Number(session.user.id),
-    });
-  }
-
-  async function gerarPdf() {
-    "use server";
-    await gerarPdfApresentacaoCliente({
-      projetoId,
-      usuarioId: Number(session.user.id),
-    });
-  }
+  const lucro = recebemos - aPagar;
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6 space-y-8">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Financeiro do Projeto</h1>
-          <p className="text-sm text-neutral-500">
-            Projeto #{vm.projeto.id} — {vm.projeto.nome ?? "Sem nome"}
-          </p>
-        </div>
-        {/* Botão de PDF no topo também */}
-        <form action={gerarPdf}>
-          <button
-            type="submit"
-            className="rounded-lg border px-4 py-2 text-sm font-medium hover:bg-neutral-50"
-          >
-            Gerar PDF p/ Cliente
-          </button>
-        </form>
-      </div>
+    <main style={{ padding: '24px', maxWidth: 720 }}>
+      <h1 style={{ fontSize: '22px', fontWeight: 700 }}>
+        projetos/{projetoId}/financeiro
+      </h1>
 
-      {/* Cards de totais (preserva o que já existe) */}
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <div className="rounded-xl border p-4">
-          <div className="text-xs text-neutral-500">Total Recebido</div>
-          <div className="text-xl font-semibold">
-            {vm.totais.formatado.totalRecebido}
-          </div>
-        </div>
-        <div className="rounded-xl border p-4">
-          <div className="text-xs text-neutral-500">Total a Pagar</div>
-          <div className="text-xl font-semibold">
-            {vm.totais.formatado.totalAPagar}
-          </div>
-        </div>
-        <div className="rounded-xl border p-4">
-          <div className="text-xs text-neutral-500">Lucro Estimado</div>
-          <div className="text-xl font-semibold">
-            {vm.totais.formatado.lucro}
-          </div>
-        </div>
-      </section>
+      {!temEstimativaAprovada ? (
+        <p style={{ color: '#b00', marginTop: 12 }}>
+          ⚠️ Este projeto ainda não tem uma estimativa <b>aprovada</b>.
+        </p>
+      ) : null}
 
-      {/* Observações (preserva fluxo de salvar existente) */}
-      <section className="rounded-xl border p-4 space-y-3">
-        <h2 className="text-lg font-medium">Observações</h2>
-        <form action={salvarObservacao} className="space-y-3">
-          <textarea
-            name="observacao"
-            defaultValue={vm.observacao ?? ""}
-            rows={4}
-            className="w-full rounded-lg border p-3 outline-none focus:ring-2"
-            placeholder="Observações internas do financeiro deste projeto…"
-          />
-          <div className="flex justify-end">
-            <button
-              type="submit"
-              className="rounded-lg border px-4 py-2 text-sm font-medium hover:bg-neutral-50"
+      <form action={salvarResumoFinanceiro} style={{ marginTop: 24 }}>
+        <input type="hidden" name="projetoId" value={projetoId} />
+
+        <div style={{ display: 'grid', gap: 12, gridTemplateColumns: '1fr 1fr 1fr' }}>
+          <div style={{ padding: 16, border: '1px solid #eee', borderRadius: 12 }}>
+            <div style={{ fontSize: 12, color: '#666' }}>Recebemos (R$)</div>
+            <input
+              name="recebemos"
+              defaultValue={recebemos.toFixed(2)}
+              inputMode="decimal"
+              style={{
+                marginTop: 6,
+                width: '100%',
+                padding: '8px 10px',
+                border: '1px solid #ddd',
+                borderRadius: 8,
+                fontWeight: 700,
+              }}
+            />
+          </div>
+
+          <div style={{ padding: 16, border: '1px solid #eee', borderRadius: 12 }}>
+            <div style={{ fontSize: 12, color: '#666' }}>A pagar fornecedores (R$)</div>
+            <div style={{ marginTop: 10, fontWeight: 700 }}>{aPagar.toFixed(2)}</div>
+            <div style={{ marginTop: 6, fontSize: 12, color: '#666' }}>
+              Calculado da estimativa aprovada
+            </div>
+          </div>
+
+          <div style={{ padding: 16, border: '1px solid #eee', borderRadius: 12 }}>
+            <div style={{ fontSize: 12, color: '#666' }}>Lucro (R$)</div>
+            <div
+              style={{
+                marginTop: 10,
+                fontWeight: 700,
+                color: lucro >= 0 ? '#0a0' : '#b00',
+              }}
             >
-              Salvar
-            </button>
-          </div>
-        </form>
-      </section>
-
-      {/* Novidade 1: Tabela de Itens com Ajustes (não altera orçamento original) */}
-      <section className="rounded-xl border p-4">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-medium">Itens da Estimativa Aprovada</h2>
-          <div className="text-xs text-neutral-500">
-            Ajustes ficam em <code>FinanceiroAjuste</code>
+              {lucro.toFixed(2)}
+            </div>
+            <div style={{ marginTop: 6, fontSize: 12, color: '#666' }}>
+              Recebemos − A pagar
+            </div>
           </div>
         </div>
 
-        <FinanceiroTabela
-          projetoId={projetoId}
-          usuarioId={Number(session.user.id)}
-          itens={vm.itens} // cada item já vem com ajustes aplicáveis (se houver)
-        />
-      </section>
+        <div style={{ marginTop: 16 }}>
+          <div style={{ fontSize: 12, color: '#666', marginBottom: 6 }}>Observações</div>
+          <textarea
+            name="observacoes"
+            defaultValue={observacoes}
+            rows={5}
+            style={{
+              width: '100%',
+              padding: '10px 12px',
+              border: '1px solid #ddd',
+              borderRadius: 8,
+            }}
+            placeholder="Anotações livres..."
+          />
+        </div>
 
-      {/* Novidade 2: Resumo + Honorários + PDF */}
-      <section className="rounded-xl border p-4">
-        <FinanceiroResumo
-          projetoId={projetoId}
-          usuarioId={Number(session.user.id)}
-          totaisBase={vm.totais}
-          onSimularHonorariosServer={aplicarHonorariosEmMemoria}
-          onGerarPdfServer={gerarPdfApresentacaoCliente}
-        />
-      </section>
-
-      {/* Botão de PDF no final (redundância UX) */}
-      <div className="flex justify-end">
-        <form action={gerarPdf}>
+        <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end' }}>
           <button
             type="submit"
-            className="rounded-lg border px-4 py-2 text-sm font-medium hover:bg-neutral-50"
+            style={{
+              padding: '10px 14px',
+              borderRadius: 10,
+              border: '1px solid #111',
+              background: '#111',
+              color: '#fff',
+              fontWeight: 600,
+            }}
           >
-            Gerar PDF p/ Cliente
+            Salvar
           </button>
-        </form>
-      </div>
-    </div>
+        </div>
+      </form>
+    </main>
   );
 }
