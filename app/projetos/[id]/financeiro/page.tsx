@@ -6,16 +6,32 @@ import { revalidatePath } from 'next/cache';
 
 type Props = { params: { id: string } };
 
+// Helpers seguros para Decimal -> number
+function toNum(v: any, fallback = 0): number {
+  if (v == null) return fallback;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+
 async function getBaseFinanceiro(projetoId: number) {
   try {
-    // ======== Busca itens de forma segura (sem includes perigosos) ========
+    // Estimativa aprovada + itens (usando nomes reais do schema)
     const estimativa = await prisma.estimativa.findFirst({
       where: { projetoId, aprovada: true },
       include: {
         itens: {
           select: {
             id: true,
-            totalItem: true,
+            quantidade: true,      // Decimal(12,3)
+            valorUnitMat: true,    // Decimal?
+            valorUnitMo: true,     // Decimal?
+            totalItem: true,       // Decimal?
+            produto: {             // relação real
+              select: { nome: true, tipo: true },
+            },
+            unidade: {
+              select: { sigla: true },
+            },
           },
         },
       },
@@ -23,15 +39,15 @@ async function getBaseFinanceiro(projetoId: number) {
 
     const itens = estimativa?.itens ?? [];
 
-    // ======== Calcula total a pagar ========
-    const aPagar = itens.reduce((acc, it) => acc + Number(it.totalItem ?? 0), 0);
+    // Total a pagar (fornecedores) a partir do totalItem
+    const aPagar = itens.reduce((acc, it) => acc + toNum(it.totalItem, 0), 0);
 
-    // ======== Busca resumo do projeto ========
+    // Resumo financeiro (legado)
     const resumo = await prisma.resumoProjeto.findUnique({
       where: { projetoId },
     });
 
-    // ======== Busca ajustes existentes ========
+    // Ajustes existentes (para pré-preencher)
     const ajustes = await prisma.financeiroAjuste.findMany({
       where: { projetoId },
       orderBy: { updatedAt: 'desc' },
@@ -47,38 +63,54 @@ async function getBaseFinanceiro(projetoId: number) {
       if (aj.estimativaItemId) {
         if (!ajustePorItem.has(aj.estimativaItemId)) {
           ajustePorItem.set(aj.estimativaItemId, {
-            percentual: aj.percentual != null ? Number(aj.percentual) : null,
-            valorFixo: aj.valorFixo != null ? Number(aj.valorFixo) : null,
+            percentual: aj.percentual != null ? toNum(aj.percentual, null as any) : null,
+            valorFixo: aj.valorFixo != null ? toNum(aj.valorFixo, null as any) : null,
             observacao: aj.observacao ?? null,
           });
         }
       } else if (aj.percentual != null && honorariosPercentual == null) {
-        honorariosPercentual = Number(aj.percentual);
+        honorariosPercentual = toNum(aj.percentual, null as any);
       }
     }
 
-    // ======== Monta tabela segura ========
+    // Normalização para a tabela
     const itensTabela = itens.map((it) => {
+      const q = toNum(it.quantidade, 0);
+      const unitMat = toNum(it.valorUnitMat, 0);
+      const unitMo = toNum(it.valorUnitMo, 0);
+      const subtotal = toNum(it.totalItem, 0);
+
+      // Preferimos valor unitário informado (mat + mo). Se não houver, derivamos por regra de três.
+      const precoUnitarioBase = unitMat + unitMo;
+      const precoUnitario =
+        precoUnitarioBase > 0
+          ? precoUnitarioBase
+          : q > 0
+          ? subtotal / q
+          : 0;
+
       const ajuste = it.id ? ajustePorItem.get(it.id) : undefined;
-      const subtotal = Number(it.totalItem ?? 0);
 
       return {
         id: it.id,
-        tipo: 'SERVICO' as const,
-        nome: `Item #${it.id}`,
-        quantidade: 0,
-        unidade: null as string | null,
-        precoUnitario: 0,
+        tipo: (it.produto?.tipo as 'PRODUTO' | 'SERVICO' | 'AMBOS') === 'PRODUTO'
+          ? 'PRODUTO'
+          : 'SERVICO', // para exibição; seu enum tem AMBOS também
+        nome: it.produto?.nome || `Item #${it.id}`,
+        quantidade: q,
+        unidade: it.unidade?.sigla ?? null,
+        precoUnitario,
         subtotal,
         ajuste: ajuste || null,
-        grupoSimilar: `Item #${it.id}`,
+        // Para "aplicar em similares", agrupamos por nome real do produto
+        grupoSimilar: it.produto?.nome || null,
       };
     });
 
     return {
       temEstimativaAprovada: !!estimativa,
       aPagar,
-      recebemos: Number(resumo?.recebemos || 0),
+      recebemos: toNum(resumo?.recebemos, 0),
       observacoes: resumo?.observacoes || '',
       itensTabela,
       honorariosPercentual,
@@ -98,7 +130,7 @@ async function getBaseFinanceiro(projetoId: number) {
 
 export default async function Page({ params }: Props) {
   const projetoId = Number(params.id);
-  const usuarioId = 0; // quando houver auth, injeta o id real
+  const usuarioId = 0; // quando tiver auth, preencher com o usuário logado
 
   const {
     temEstimativaAprovada,
@@ -123,7 +155,7 @@ export default async function Page({ params }: Props) {
         </p>
       ) : null}
 
-      {/* =================== BLOCO RESUMO =================== */}
+      {/* RESUMO (mantido) */}
       <form action={salvarResumoFinanceiro} style={{ marginTop: 8 }}>
         <input type="hidden" name="projetoId" value={projetoId} />
 
@@ -209,7 +241,7 @@ export default async function Page({ params }: Props) {
         </div>
       </form>
 
-      {/* =================== TABELA DE ITENS =================== */}
+      {/* TABELA DE ITENS (ajustes) */}
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Ajustes por item</h2>
         {temEstimativaAprovada ? (
@@ -225,7 +257,7 @@ export default async function Page({ params }: Props) {
         )}
       </section>
 
-      {/* =================== HONORÁRIOS =================== */}
+      {/* HONORÁRIOS */}
       <section className="space-y-2">
         <h2 className="text-lg font-semibold">Honorários / Consultoria</h2>
         <form
@@ -266,7 +298,7 @@ export default async function Page({ params }: Props) {
         </form>
       </section>
 
-      {/* =================== PDF =================== */}
+      {/* PDF */}
       <section className="space-y-2">
         <h2 className="text-lg font-semibold">Apresentação ao cliente</h2>
         <form
