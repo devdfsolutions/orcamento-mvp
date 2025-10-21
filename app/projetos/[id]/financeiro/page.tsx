@@ -7,96 +7,118 @@ import { revalidatePath } from 'next/cache';
 type Props = { params: { id: string } };
 
 async function getBaseFinanceiro(projetoId: number) {
-  // 1) estimativa aprovada + itens
-  const estimativa = await prisma.estimativa.findFirst({
-    where: { projetoId, aprovada: true },
-    include: {
-      itens: {
-        include: {
-          produtoServico: { select: { id: true, nome: true, tipo: true } },
-          unidade: { select: { sigla: true } },
+  try {
+    // 1) estimativa aprovada + itens (somente campos seguros)
+    const estimativa = await prisma.estimativa.findFirst({
+      where: { projetoId, aprovada: true },
+      include: {
+        itens: {
+          select: {
+            id: true,
+            quantidade: true,
+            precoUnitario: true,
+            totalItem: true,
+            // se no seu schema o item tem estes campos, ótimo.
+            // Senão, caímos nos fallbacks abaixo.
+            // nome: true,
+            // tipo: true,
+          },
         },
       },
-    },
-  });
+    });
 
-  const aPagar =
-    estimativa?.itens.reduce((acc, it) => acc + Number(it.totalItem ?? 0), 0) || 0;
+    const itens = estimativa?.itens ?? [];
 
-  // 2) resumo financeiro (recebemos/observacoes)
-  const resumo = await prisma.resumoProjeto.findUnique({
-    where: { projetoId },
-  });
+    // 2) total a pagar
+    const aPagar = itens.reduce((acc, it) => acc + Number(it.totalItem ?? 0), 0);
 
-  // 3) ajustes existentes (para pré-preencher)
-  const ajustes = await prisma.financeiroAjuste.findMany({
-    where: { projetoId },
-    orderBy: { updatedAt: 'desc' },
-  });
+    // 3) resumo financeiro
+    const resumo = await prisma.resumoProjeto.findUnique({
+      where: { projetoId },
+    });
 
-  const ajustePorItem = new Map<
-    number,
-    { percentual: number | null; valorFixo: number | null; observacao: string | null }
-  >();
-  let honorariosPercentual: number | null = null;
+    // 4) ajustes existentes (para pré-preencher)
+    const ajustes = await prisma.financeiroAjuste.findMany({
+      where: { projetoId },
+      orderBy: { updatedAt: 'desc' },
+    });
 
-  for (const aj of ajustes) {
-    if (aj.estimativaItemId) {
-      if (!ajustePorItem.has(aj.estimativaItemId)) {
-        ajustePorItem.set(aj.estimativaItemId, {
-          percentual: aj.percentual ? Number(aj.percentual) : null,
-          valorFixo: aj.valorFixo ? Number(aj.valorFixo) : null,
-          observacao: aj.observacao ?? null,
-        });
+    const ajustePorItem = new Map<
+      number,
+      { percentual: number | null; valorFixo: number | null; observacao: string | null }
+    >();
+    let honorariosPercentual: number | null = null;
+
+    for (const aj of ajustes) {
+      if (aj.estimativaItemId) {
+        if (!ajustePorItem.has(aj.estimativaItemId)) {
+          ajustePorItem.set(aj.estimativaItemId, {
+            percentual: aj.percentual != null ? Number(aj.percentual) : null,
+            valorFixo: aj.valorFixo != null ? Number(aj.valorFixo) : null,
+            observacao: aj.observacao ?? null,
+          });
+        }
+      } else if (aj.percentual != null && honorariosPercentual == null) {
+        honorariosPercentual = Number(aj.percentual);
       }
-    } else if (aj.percentual != null) {
-      // interpretamos como honorários no nível do projeto
-      if (honorariosPercentual == null) honorariosPercentual = Number(aj.percentual);
     }
-  }
 
-  const itensTabela =
-    (estimativa?.itens || []).map((it) => {
+    // 5) normaliza itens para a tabela (sem depender de relations)
+    const itensTabela = itens.map((it) => {
       const ajuste = it.id ? ajustePorItem.get(it.id) : undefined;
+
       const precoUnit =
         it.precoUnitario != null ? Number(it.precoUnitario) : 0;
+
       const subtotal =
         it.totalItem != null
           ? Number(it.totalItem)
           : Number(it.quantidade || 0) * precoUnit;
 
-      const grupoSimilar =
-        it.produtoServico?.nome || (it as any).nome || null;
+      // tentativas de obter nome/tipo direto no item;
+      // se não existir, usa fallback
+      const anyIt = it as any;
+      const nome = anyIt?.nome ?? `Item #${it.id}`;
+      const tipo = (anyIt?.tipo as 'PRODUTO' | 'SERVICO') ?? 'SERVICO';
 
       return {
         id: it.id,
-        tipo:
-          (it.produtoServico?.tipo as 'PRODUTO' | 'SERVICO') ||
-          ((it as any).tipo as 'PRODUTO' | 'SERVICO') ||
-          'SERVICO',
-        nome: it.produtoServico?.nome || (it as any).nome || `Item #${it.id}`,
+        tipo,
+        nome,
         quantidade: Number(it.quantidade || 0),
-        unidade: it.unidade?.sigla || null,
+        unidade: null as string | null, // sem relation por enquanto
         precoUnitario: precoUnit,
         subtotal,
         ajuste: ajuste || null,
-        grupoSimilar,
+        grupoSimilar: nome, // agrupa por nome simples
       };
-    }) || [];
+    });
 
-  return {
-    temEstimativaAprovada: !!estimativa,
-    aPagar,
-    recebemos: Number(resumo?.recebemos || 0),
-    observacoes: resumo?.observacoes || '',
-    itensTabela,
-    honorariosPercentual,
-  };
+    return {
+      temEstimativaAprovada: !!estimativa,
+      aPagar,
+      recebemos: Number(resumo?.recebemos || 0),
+      observacoes: resumo?.observacoes || '',
+      itensTabela,
+      honorariosPercentual,
+    };
+  } catch (e) {
+    console.error('[financeiro:getBaseFinanceiro] erro', e);
+    // fallback seguro para a página não cair
+    return {
+      temEstimativaAprovada: false,
+      aPagar: 0,
+      recebemos: 0,
+      observacoes: '',
+      itensTabela: [] as any[],
+      honorariosPercentual: null as number | null,
+    };
+  }
 }
 
 export default async function Page({ params }: Props) {
   const projetoId = Number(params.id);
-  const usuarioId = 0; // TODO: quando houver auth, substituir pelo ID real do usuário logado
+  const usuarioId = 0; // quando tiver auth, injeta o id real
 
   const {
     temEstimativaAprovada,
@@ -117,7 +139,7 @@ export default async function Page({ params }: Props) {
 
       {!temEstimativaAprovada ? (
         <p style={{ color: '#b00', marginTop: 12 }}>
-          ⚠️ Este projeto ainda não tem uma estimativa <b>aprovada</b>.
+          ⚠️ Este projeto ainda não tem uma estimativa <b>aprovada</b> ou houve um erro ao carregar os itens.
         </p>
       ) : null}
 
@@ -142,7 +164,7 @@ export default async function Page({ params }: Props) {
                 marginTop: 6,
                 width: '100%',
                 padding: '8px 10px',
-                border: '1px solid #ddd', // <-- CORRIGIDO AQUI
+                border: '1px solid #ddd',
                 borderRadius: 8,
                 fontWeight: 700,
               }}
