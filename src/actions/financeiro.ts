@@ -18,7 +18,9 @@ export async function salvarResumoFinanceiro(formData: FormData) {
   revalidatePath(`/projetos/${projetoId}/financeiro`);
 }
 
-// ------- NOVAS ACTIONS -------
+// ======================================================
+// NOVAS ACTIONS – versão segura sem includes arriscados
+// ======================================================
 
 type AjusteItemPayload = {
   estimativaItemId: number;
@@ -36,37 +38,27 @@ export async function upsertAjustesFinanceiros(input: {
 }) {
   const { projetoId, usuarioId, itens } = input;
 
-  // Descobre a estimativa aprovada do projeto
+  // Busca somente os IDs dos itens da estimativa aprovada
   const estimativa = await prisma.estimativa.findFirst({
     where: { projetoId, aprovada: true },
     include: {
       itens: {
-        include: {
-          produtoServico: { select: { nome: true } },
-        },
+        select: { id: true },
       },
     },
   });
 
-  if (!estimativa) {
-    return;
-  }
+  if (!estimativa) return;
 
-  // Prepara lotes de inserção
+  const itemIdsSet = new Set(estimativa.itens.map((i) => i.id));
+
   const creates: Parameters<typeof prisma.financeiroAjuste.create>[] = [];
 
   for (const it of itens) {
-    // lista de itens-alvo
-    let alvoIds: number[] = [it.estimativaItemId];
+    if (!itemIdsSet.has(it.estimativaItemId)) continue;
 
-    if (it.aplicarEmSimilares && it.grupoSimilar) {
-      const similares = estimativa.itens.filter(
-        (row) =>
-          (row.produtoServico?.nome || (row as any).nome || null) === it.grupoSimilar
-      );
-      const similaresIds = similares.map((s) => s.id);
-      alvoIds = Array.from(new Set([...alvoIds, ...similaresIds]));
-    }
+    // aplica só nos selecionados — não busca similares por nome
+    const alvoIds: number[] = [it.estimativaItemId];
 
     for (const alvoId of alvoIds) {
       creates.push({
@@ -103,7 +95,6 @@ export async function aplicarHonorarios(formData: FormData) {
     data: {
       usuarioId: Number.isFinite(usuarioId) ? usuarioId : 0,
       projetoId,
-      // sem estimativaItemId => ajuste no nível do projeto
       percentual,
       valorFixo: null,
       observacao: 'HONORARIOS',
@@ -113,10 +104,8 @@ export async function aplicarHonorarios(formData: FormData) {
   revalidatePath(`/projetos/${projetoId}/financeiro`);
 }
 
-// MVP: placeholder – aqui você pode montar o PDF com um template e bibliotecas como pdf-lib ou @react-pdf/renderer.
-// Por hora só revalida a página para não quebrar o fluxo do usuário.
 export async function gerarPdfApresentacao(formData: FormData) {
   const projetoId = Number(formData.get('projetoId'));
-  // TODO: montar o PDF dos valores ajustados e enviar para download/armazenar
+  // TODO: montar o PDF dos valores ajustados e enviar para download
   revalidatePath(`/projetos/${projetoId}/financeiro`);
 }
