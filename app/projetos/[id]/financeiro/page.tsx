@@ -8,20 +8,14 @@ type Props = { params: { id: string } };
 
 async function getBaseFinanceiro(projetoId: number) {
   try {
-    // 1) estimativa aprovada + itens (somente campos seguros)
+    // ======== Busca itens de forma segura (sem includes perigosos) ========
     const estimativa = await prisma.estimativa.findFirst({
       where: { projetoId, aprovada: true },
       include: {
         itens: {
           select: {
             id: true,
-            quantidade: true,
-            precoUnitario: true,
             totalItem: true,
-            // se no seu schema o item tem estes campos, ótimo.
-            // Senão, caímos nos fallbacks abaixo.
-            // nome: true,
-            // tipo: true,
           },
         },
       },
@@ -29,15 +23,15 @@ async function getBaseFinanceiro(projetoId: number) {
 
     const itens = estimativa?.itens ?? [];
 
-    // 2) total a pagar
+    // ======== Calcula total a pagar ========
     const aPagar = itens.reduce((acc, it) => acc + Number(it.totalItem ?? 0), 0);
 
-    // 3) resumo financeiro
+    // ======== Busca resumo do projeto ========
     const resumo = await prisma.resumoProjeto.findUnique({
       where: { projetoId },
     });
 
-    // 4) ajustes existentes (para pré-preencher)
+    // ======== Busca ajustes existentes ========
     const ajustes = await prisma.financeiroAjuste.findMany({
       where: { projetoId },
       orderBy: { updatedAt: 'desc' },
@@ -63,34 +57,21 @@ async function getBaseFinanceiro(projetoId: number) {
       }
     }
 
-    // 5) normaliza itens para a tabela (sem depender de relations)
+    // ======== Monta tabela segura ========
     const itensTabela = itens.map((it) => {
       const ajuste = it.id ? ajustePorItem.get(it.id) : undefined;
-
-      const precoUnit =
-        it.precoUnitario != null ? Number(it.precoUnitario) : 0;
-
-      const subtotal =
-        it.totalItem != null
-          ? Number(it.totalItem)
-          : Number(it.quantidade || 0) * precoUnit;
-
-      // tentativas de obter nome/tipo direto no item;
-      // se não existir, usa fallback
-      const anyIt = it as any;
-      const nome = anyIt?.nome ?? `Item #${it.id}`;
-      const tipo = (anyIt?.tipo as 'PRODUTO' | 'SERVICO') ?? 'SERVICO';
+      const subtotal = Number(it.totalItem ?? 0);
 
       return {
         id: it.id,
-        tipo,
-        nome,
-        quantidade: Number(it.quantidade || 0),
-        unidade: null as string | null, // sem relation por enquanto
-        precoUnitario: precoUnit,
+        tipo: 'SERVICO' as const,
+        nome: `Item #${it.id}`,
+        quantidade: 0,
+        unidade: null as string | null,
+        precoUnitario: 0,
         subtotal,
         ajuste: ajuste || null,
-        grupoSimilar: nome, // agrupa por nome simples
+        grupoSimilar: `Item #${it.id}`,
       };
     });
 
@@ -104,7 +85,6 @@ async function getBaseFinanceiro(projetoId: number) {
     };
   } catch (e) {
     console.error('[financeiro:getBaseFinanceiro] erro', e);
-    // fallback seguro para a página não cair
     return {
       temEstimativaAprovada: false,
       aPagar: 0,
@@ -118,7 +98,7 @@ async function getBaseFinanceiro(projetoId: number) {
 
 export default async function Page({ params }: Props) {
   const projetoId = Number(params.id);
-  const usuarioId = 0; // quando tiver auth, injeta o id real
+  const usuarioId = 0; // quando houver auth, injeta o id real
 
   const {
     temEstimativaAprovada,
@@ -143,7 +123,7 @@ export default async function Page({ params }: Props) {
         </p>
       ) : null}
 
-      {/* Resumo (mantido) */}
+      {/* =================== BLOCO RESUMO =================== */}
       <form action={salvarResumoFinanceiro} style={{ marginTop: 8 }}>
         <input type="hidden" name="projetoId" value={projetoId} />
 
@@ -229,7 +209,7 @@ export default async function Page({ params }: Props) {
         </div>
       </form>
 
-      {/* Ajustes por item */}
+      {/* =================== TABELA DE ITENS =================== */}
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Ajustes por item</h2>
         {temEstimativaAprovada ? (
@@ -245,7 +225,7 @@ export default async function Page({ params }: Props) {
         )}
       </section>
 
-      {/* Honorários / Consultoria */}
+      {/* =================== HONORÁRIOS =================== */}
       <section className="space-y-2">
         <h2 className="text-lg font-semibold">Honorários / Consultoria</h2>
         <form
@@ -286,7 +266,7 @@ export default async function Page({ params }: Props) {
         </form>
       </section>
 
-      {/* PDF */}
+      {/* =================== PDF =================== */}
       <section className="space-y-2">
         <h2 className="text-lg font-semibold">Apresentação ao cliente</h2>
         <form
