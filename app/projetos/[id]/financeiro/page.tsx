@@ -2,51 +2,42 @@
 import { prisma } from '@/lib/prisma';
 import { salvarResumoFinanceiro } from '@/actions/financeiro';
 import FinanceiroTabela from '@/components/FinanceiroTabela';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import { revalidatePath } from 'next/cache';
-
-// (próximas actions – serão implementadas no próximo passo)
-// import { aplicarHonorarios, gerarPdfApresentacao } from '@/actions/financeiro';
 
 type Props = { params: { id: string } };
 
 async function getBaseFinanceiro(projetoId: number) {
-  // 1) estimativa aprovada + itens (com nome, tipo, unidade, valores)
+  // 1) estimativa aprovada + itens
   const estimativa = await prisma.estimativa.findFirst({
     where: { projetoId, aprovada: true },
     include: {
       itens: {
         include: {
-          produtoServico: { select: { id: true, nome: true, tipo: true } }, // caso use ProdutoServico
+          produtoServico: { select: { id: true, nome: true, tipo: true } },
           unidade: { select: { sigla: true } },
         },
       },
     },
   });
 
-  // 2) total a pagar calculado da estimativa aprovada
   const aPagar =
     estimativa?.itens.reduce((acc, it) => acc + Number(it.totalItem ?? 0), 0) || 0;
 
-  // 3) resumo financeiro (recebemos/observacoes)
+  // 2) resumo financeiro (recebemos/observacoes)
   const resumo = await prisma.resumoProjeto.findUnique({
     where: { projetoId },
   });
 
-  // 4) ajustes existentes do projeto (para pré-preencher a tabela)
+  // 3) ajustes existentes (para pré-preencher)
   const ajustes = await prisma.financeiroAjuste.findMany({
     where: { projetoId },
     orderBy: { updatedAt: 'desc' },
   });
 
-  // Mapa: estimativaItemId -> ajuste mais recente
-  const ajustePorItem = new Map<number, {
-    percentual: number | null;
-    valorFixo: number | null;
-    observacao: string | null;
-  }>();
-
+  const ajustePorItem = new Map<
+    number,
+    { percentual: number | null; valorFixo: number | null; observacao: string | null }
+  >();
   let honorariosPercentual: number | null = null;
 
   for (const aj of ajustes) {
@@ -58,16 +49,12 @@ async function getBaseFinanceiro(projetoId: number) {
           observacao: aj.observacao ?? null,
         });
       }
-    } else {
-      // consideramos como lançamento de honorários no nível do projeto
-      // (pega o mais recente, já que está ordenado por updatedAt desc)
-      if (aj.percentual) {
-        honorariosPercentual = Number(aj.percentual);
-      }
+    } else if (aj.percentual != null) {
+      // interpretamos como honorários no nível do projeto
+      if (honorariosPercentual == null) honorariosPercentual = Number(aj.percentual);
     }
   }
 
-  // Normaliza itens para a tabela
   const itensTabela =
     (estimativa?.itens || []).map((it) => {
       const ajuste = it.id ? ajustePorItem.get(it.id) : undefined;
@@ -78,8 +65,6 @@ async function getBaseFinanceiro(projetoId: number) {
           ? Number(it.totalItem)
           : Number(it.quantidade || 0) * precoUnit;
 
-      // "grupoSimilar": estratégia simples: nome do produto/serviço;
-      // pode ser refinado depois (por categoria, tipo, etc.)
       const grupoSimilar =
         it.produtoServico?.nome || (it as any).nome || null;
 
@@ -111,22 +96,7 @@ async function getBaseFinanceiro(projetoId: number) {
 
 export default async function Page({ params }: Props) {
   const projetoId = Number(params.id);
-
-  const session = await getServerSession(authOptions);
-  const usuarioId = Number((session?.user as any)?.id || (session?.user as any)?.usuarioId || 0);
-
-  if (!session || !usuarioId) {
-    return (
-      <main style={{ padding: '24px', maxWidth: 720 }}>
-        <h1 style={{ fontSize: '22px', fontWeight: 700 }}>
-          projetos/{projetoId}/financeiro
-        </h1>
-        <p style={{ marginTop: 12, color: '#b00' }}>
-          ⚠️ Você precisa estar autenticado para acessar o financeiro do projeto.
-        </p>
-      </main>
-    );
-  }
+  const usuarioId = 0; // TODO: quando houver auth, substituir pelo ID real do usuário logado
 
   const {
     temEstimativaAprovada,
@@ -151,7 +121,7 @@ export default async function Page({ params }: Props) {
         </p>
       ) : null}
 
-      {/* Bloco Resumo (mantém o que já existia) */}
+      {/* Resumo (mantido) */}
       <form action={salvarResumoFinanceiro} style={{ marginTop: 8 }}>
         <input type="hidden" name="projetoId" value={projetoId} />
 
@@ -172,7 +142,7 @@ export default async function Page({ params }: Props) {
                 marginTop: 6,
                 width: '100%',
                 padding: '8px 10px',
-                border: '1px solid #ddd',
+                border: '1px solid '#ddd',
                 borderRadius: 8,
                 fontWeight: 700,
               }}
@@ -237,7 +207,7 @@ export default async function Page({ params }: Props) {
         </div>
       </form>
 
-      {/* Bloco de AJUSTES por item */}
+      {/* Ajustes por item */}
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Ajustes por item</h2>
         {temEstimativaAprovada ? (
@@ -253,16 +223,14 @@ export default async function Page({ params }: Props) {
         )}
       </section>
 
-      {/* Honorários/Consultoria (ajuste percentual no nível do projeto) */}
+      {/* Honorários / Consultoria */}
       <section className="space-y-2">
         <h2 className="text-lg font-semibold">Honorários / Consultoria</h2>
         <form
-          // action={aplicarHonorarios}
           action={async (formData) => {
-            // placeholder até implementarmos aplicarHonorarios na actions
-            // Você implementará em src/actions/financeiro.ts:
-            // await aplicarHonorarios(formData)
-            console.log('TODO: aplicarHonorarios');
+            // import dinâmico para evitar erro se o arquivo ainda não existia em builds antigos
+            const { aplicarHonorarios } = await import('@/actions/financeiro');
+            await aplicarHonorarios(formData);
             revalidatePath(`/projetos/${projetoId}/financeiro`);
           }}
           className="flex items-end gap-8"
@@ -297,15 +265,13 @@ export default async function Page({ params }: Props) {
         </form>
       </section>
 
-      {/* Geração de PDF para apresentação ao cliente */}
+      {/* PDF */}
       <section className="space-y-2">
         <h2 className="text-lg font-semibold">Apresentação ao cliente</h2>
         <form
-          // action={gerarPdfApresentacao}
           action={async (formData) => {
-            // placeholder até implementarmos gerarPdfApresentacao na actions
-            // await gerarPdfApresentacao(formData)
-            console.log('TODO: gerarPdfApresentacao');
+            const { gerarPdfApresentacao } = await import('@/actions/financeiro');
+            await gerarPdfApresentacao(formData);
           }}
           className="flex items-center gap-4"
         >
