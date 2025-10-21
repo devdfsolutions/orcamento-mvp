@@ -1,331 +1,292 @@
-// prisma/schema.prisma
-generator client {
-  provider = "prisma-client-js"
+// src/actions/estimativas.ts
+'use server';
+
+import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
+import { prisma } from '@/lib/prisma';
+import { getSupabaseServer } from '@/lib/supabaseServer';
+
+/* ===== helpers ===== */
+function parseNum(v: FormDataEntryValue | null): number | null {
+  if (v == null) return null;
+  const s = String(v).trim();
+  if (!s) return null;
+  const n = Number(s.replace(/\./g, '').replace(',', '.'));
+  return Number.isFinite(n) ? n : null;
+}
+function round2(n: number | null | undefined) {
+  if (n == null) return null;
+  return Math.round(n * 100) / 100;
 }
 
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+type FonteMat = 'P1' | 'P2' | 'P3' | null;
+type FonteMo  = 'M1' | 'M2' | 'M3' | null;
+
+/** resolve o Usuario interno (id inteiro) a partir do Supabase */
+async function getMeUsuarioId(): Promise<number> {
+  const supabase = await getSupabaseServer();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Usuário não autenticado.');
+
+  const me = await prisma.usuario.findUnique({
+    where: { supabaseUserId: user.id },
+    select: { id: true },
+  });
+  if (!me) throw new Error('Usuário da aplicação não encontrado.');
+  return me.id; // inteiro (FK)
 }
 
-/* =========================
-   ENUMS
-   ========================= */
-enum TipoItem {
-  PRODUTO
-  SERVICO
-  AMBOS
+/** busca preço do vínculo fornecedor-produto */
+async function pickPrecoFromVinculo(
+  fornecedorId: number,
+  produtoId: number,
+  fonteMat: FonteMat,
+  fonteMo: FonteMo,
+) {
+  // 🔧 trocado para findFirst (mais seguro que findUnique)
+  const vinc = await prisma.fornecedorProduto.findFirst({
+    where: { fornecedorId, produtoId },
+    select: {
+      precoMatP1: true, precoMatP2: true, precoMatP3: true,
+      precoMoM1: true,  precoMoM2: true,  precoMoM3: true,
+    },
+  });
+
+  if (!vinc) return { mat: null, mo: null };
+
+  let mat: number | null = null;
+  if (fonteMat === 'P1') mat = Number(vinc.precoMatP1 ?? null);
+  if (fonteMat === 'P2') mat = Number(vinc.precoMatP2 ?? null);
+  if (fonteMat === 'P3') mat = Number(vinc.precoMatP3 ?? null);
+
+  let mo: number | null = null;
+  if (fonteMo === 'M1') mo = Number(vinc.precoMoM1 ?? null);
+  if (fonteMo === 'M2') mo = Number(vinc.precoMoM2 ?? null);
+  if (fonteMo === 'M3') mo = Number(vinc.precoMoM3 ?? null);
+
+  return { mat, mo };
 }
 
-enum FontePrecoMaterial {
-  P1
-  P2
-  P3
-}
+/* ==== redireciona para /projetos/[pid]/itens com mensagem, sem quebrar a página ==== */
+async function backToItensWithError(estimativaId: number, err: unknown) {
+  const est = await prisma.estimativa.findUnique({
+    where: { id: estimativaId },
+    select: { projetoId: true },
+  });
+  const pid = est?.projetoId;
+  const msg =
+    (err as any)?.message ??
+    (typeof err === 'string' ? err : 'Falha ao salvar o item.');
 
-enum FontePrecoMO {
-  M1
-  M2
-  M3
-}
-
-enum Role {
-  ADM
-  USER
-}
-
-/* =========================
-   CADASTROS
-   ========================= */
-
-model UnidadeMedida {
-  id         Int      @id @default(autoincrement())
-  usuarioId  Int
-  usuario    Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-
-  sigla      String
-  nome       String
-
-  produtos   ProdutoServico[]
-  itens      EstimativaItem[] // UM sugerida/override por item
-
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  @@unique([usuarioId, sigla])
-  @@index([usuarioId])
-}
-
-model ProdutoServico {
-  id              Int           @id @default(autoincrement())
-  usuarioId       Int
-  usuario         Usuario       @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-
-  nome            String
-  categoria       String?
-  unidadeMedidaId Int
-  unidade         UnidadeMedida @relation(fields: [unidadeMedidaId], references: [id])
-
-  fornecedores    FornecedorProduto[]
-  itens           EstimativaItem[]
-
-  // Relação inversa para ajustes financeiros por produto (nomeada)
-  financeirosAjustes FinanceiroAjuste[] @relation("AjustesPorProduto")
-
-  tipo        TipoItem @default(AMBOS)
-  refPrecoP1  Decimal? @db.Decimal(12, 2)
-  refPrecoP2  Decimal? @db.Decimal(12, 2)
-  refPrecoP3  Decimal? @db.Decimal(12, 2)
-
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  @@index([usuarioId, nome])
-  @@index([usuarioId])
-}
-
-model Fornecedor {
-  id         Int      @id @default(autoincrement())
-  usuarioId  Int
-  usuario    Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-
-  nome       String
-  cnpjCpf    String?
-  contato    String?
-
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  produtos   FornecedorProduto[]
-  itens      EstimativaItem[] @relation("FornecedorItens")
-
-  @@unique([usuarioId, cnpjCpf])
-  @@index([usuarioId, nome])
-  @@index([usuarioId])
-  @@unique([id, usuarioId], name: "Fornecedor_id_usuarioId_key")
-}
-
-model FornecedorProduto {
-  id           Int      @id @default(autoincrement())
-  usuarioId    Int
-  usuario      Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-
-  fornecedorId Int
-  produtoId    Int
-
-  fornecedor   Fornecedor     @relation(fields: [fornecedorId], references: [id], onDelete: Cascade)
-  produto      ProdutoServico @relation(fields: [produtoId], references: [id], onDelete: Cascade)
-
-  // 3 preços Materiais
-  precoMatP1   Decimal? @db.Decimal(12, 2)
-  precoMatP2   Decimal? @db.Decimal(12, 2)
-  precoMatP3   Decimal? @db.Decimal(12, 2)
-
-  // 3 preços Mão de Obra
-  precoMoM1    Decimal? @db.Decimal(12, 2)
-  precoMoM2    Decimal? @db.Decimal(12, 2)
-  precoMoM3    Decimal? @db.Decimal(12, 2)
-
-  dataUltAtual DateTime @default(now())
-  observacao   String?
-
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  @@unique([usuarioId, fornecedorId, produtoId])
-  @@index([usuarioId])
-  @@index([fornecedorId])
-  @@index([produtoId])
-}
-
-model ClienteUsuario {
-  id        Int     @id @default(autoincrement())
-  usuarioId Int
-  usuario   Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-
-  nome      String
-  cpf       String?
-  cnpj      String?
-  email     String?
-  telefone  String?
-  endereco  String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  projetos  Projeto[]
-
-  // Unicidade por usuário (permitindo nulls em Postgres)
-  @@unique([usuarioId, cpf])
-  @@unique([usuarioId, cnpj])
-  @@unique([usuarioId, email])
-
-  @@index([usuarioId, nome])
-  @@index([usuarioId])
+  if (pid) {
+    revalidatePath(`/projetos/${pid}/itens`);
+    redirect(`/projetos/${pid}/itens?e=${encodeURIComponent(msg)}`);
+  }
+  redirect(`/projetos?e=${encodeURIComponent(msg)}`);
 }
 
 /* =========================
-   PROJETOS & ESTIMATIVAS
-   ========================= */
+ * PROJETOS
+ * ========================= */
 
-model Projeto {
-  id         Int      @id @default(autoincrement())
-  usuarioId  Int
-  usuario    Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+export async function criarProjeto(formData: FormData) {
+  const nome = String(formData.get('nome') ?? '').trim();
+  if (!nome) throw new Error('Informe o nome do projeto');
 
-  nome       String
-  status     String   @default("rascunho") // rascunho | com_estimativa | aprovado | execucao | concluido
+  const clienteIdRaw = String(formData.get('clienteId') ?? '').trim();
+  const clienteId = clienteIdRaw ? Number(clienteIdRaw) : null;
 
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  await prisma.projeto.create({
+    data: { nome, clienteId: clienteId ?? undefined, status: 'rascunho' },
+  });
 
-  clienteId  Int?
-  cliente    ClienteUsuario? @relation(fields: [clienteId], references: [id], onDelete: SetNull)
-
-  estimativas Estimativa[]
-  resumo      ResumoProjeto?
-
-  // Relação inversa para ajustes do projeto (nomeada)
-  ajustesFinanceiros FinanceiroAjuste[] @relation("AjustesDoProjeto")
-
-  @@index([usuarioId, status])
-  @@index([clienteId])
-  @@index([usuarioId])
+  revalidatePath('/projetos');
 }
 
-model Estimativa {
-  id         Int      @id @default(autoincrement())
-  usuarioId  Int
-  usuario    Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+export async function criarProjetoAndGo(formData: FormData) {
+  const nome = String(formData.get('nome') ?? '').trim();
+  if (!nome) throw new Error('Informe o nome do projeto');
 
-  projetoId  Int
-  projeto    Projeto  @relation(fields: [projetoId], references: [id], onDelete: Cascade)
+  const clienteIdRaw = String(formData.get('clienteId') ?? '').trim();
+  const clienteId = clienteIdRaw ? Number(clienteIdRaw) : null;
 
-  nome       String   @default("Estimativa")
-  criadaEm   DateTime @default(now())
-  aprovada   Boolean  @default(false)
+  const novo = await prisma.projeto.create({
+    data: { nome, clienteId: clienteId ?? undefined, status: 'rascunho' },
+    select: { id: true },
+  });
 
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  await ensureEstimativa(novo.id);
 
-  itens      EstimativaItem[]
-
-  @@index([usuarioId, projetoId])
-  @@index([usuarioId])
+  revalidatePath('/projetos');
+  return { id: novo.id };
 }
 
-model EstimativaItem {
-  id            Int      @id @default(autoincrement())
-  usuarioId     Int
-  usuario       Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+export async function ensureEstimativa(projetoId: number): Promise<number> {
+  const e = await prisma.estimativa.findFirst({ where: { projetoId } });
+  if (e) return e.id;
 
-  estimativaId  Int
-  estimativa    Estimativa @relation(fields: [estimativaId], references: [id], onDelete: Cascade)
+  const novo = await prisma.estimativa.create({
+    data: { projetoId, nome: 'Estimativa' },
+  });
+  return novo.id;
+}
 
-  produtoId     Int
-  produto       ProdutoServico @relation(fields: [produtoId], references: [id])
+export async function aprovarEstimativa(formData: FormData) {
+  const estimativaId = Number(formData.get('estimativaId'));
+  if (!estimativaId) throw new Error('Estimativa inválida');
 
-  quantidade    Decimal @db.Decimal(12, 3)
+  const atual = await prisma.estimativa.findUnique({ where: { id: estimativaId } });
+  if (!atual) throw new Error('Estimativa não encontrada');
 
-  unidadeId     Int
-  unidade       UnidadeMedida @relation(fields: [unidadeId], references: [id])
+  await prisma.estimativa.update({
+    where: { id: estimativaId },
+    data: { aprovada: !atual.aprovada },
+  });
 
-  fornecedorId  Int
-  fornecedor    Fornecedor @relation("FornecedorItens", fields: [fornecedorId], references: [id])
-
-  fontePrecoMat FontePrecoMaterial?
-  fontePrecoMo  FontePrecoMO?
-
-  valorUnitMat  Decimal? @db.Decimal(12, 2)
-  valorUnitMo   Decimal? @db.Decimal(12, 2)
-
-  totalItem     Decimal? @db.Decimal(12, 2)
-
-  // Relação inversa para ajustes por item (nomeada)
-  financeirosAjustes FinanceiroAjuste[] @relation("AjustesPorItem")
-
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  @@index([usuarioId, estimativaId])
-  @@index([produtoId])
-  @@index([unidadeId])
-  @@index([fornecedorId])
-  @@index([usuarioId])
+  revalidatePath(`/projetos/${atual.projetoId}/itens`);
+  revalidatePath(`/projetos/${atual.projetoId}/estimativas`);
+  revalidatePath(`/projetos`);
 }
 
 /* =========================
-   FINANCEIRO (AJUSTES POR ITEM/PRODUTO/PROJETO)
-   ========================= */
+ * ITENS
+ * ========================= */
 
-model FinanceiroAjuste {
-  id               Int      @id @default(autoincrement())
-  usuarioId        Int
-  usuario          Usuario  @relation("AjustesDoUsuario", fields: [usuarioId], references: [id], onDelete: Cascade)
+export async function adicionarItem(formData: FormData) {
+  const estimativaId = Number(formData.get('estimativaId'));
+  try {
+    const usuarioId = await getMeUsuarioId();
 
-  projetoId        Int
-  projeto          Projeto  @relation("AjustesDoProjeto", fields: [projetoId], references: [id], onDelete: Cascade)
+    const produtoId    = Number(formData.get('produtoId'));
+    const fornecedorId = Number(formData.get('fornecedorId'));
+    const unidadeId    = Number(formData.get('unidadeId'));
+    const fontePrecoMat = (String(formData.get('fontePrecoMat') || '') || null) as FonteMat;
+    const fontePrecoMo  = (String(formData.get('fontePrecoMo')  || '') || null) as FonteMo;
+    const quantidade    = parseNum(formData.get('quantidade'));
 
-  estimativaItemId Int?
-  estimativaItem   EstimativaItem? @relation("AjustesPorItem", fields: [estimativaItemId], references: [id], onDelete: SetNull)
+    if (!estimativaId || !produtoId || !fornecedorId || !unidadeId)
+      throw new Error('Produto, fornecedor e unidade são obrigatórios.');
+    if (quantidade == null || quantidade <= 0)
+      throw new Error('Quantidade inválida.');
 
-  produtoId        Int?
-  produto          ProdutoServico? @relation("AjustesPorProduto", fields: [produtoId], references: [id], onDelete: SetNull)
+    const [okUM, okProd, okForn] = await Promise.all([
+      prisma.unidadeMedida.findUnique({ where: { id: unidadeId }, select: { id: true } }),
+      prisma.produtoServico.findUnique({ where: { id: produtoId }, select: { id: true } }),
+      prisma.fornecedor.findUnique({ where: { id: fornecedorId }, select: { id: true } }),
+    ]);
+    if (!okUM)   throw new Error('Unidade de medida não encontrada.');
+    if (!okProd) throw new Error('Produto/serviço não encontrado.');
+    if (!okForn) throw new Error('Fornecedor não encontrado.');
 
-  // +10.000 = +10%  |  -5.000 = -5%
-  percentual       Decimal? @db.Decimal(7, 3)
+    const { mat, mo } = await pickPrecoFromVinculo(fornecedorId, produtoId, fontePrecoMat, fontePrecoMo);
 
-  // Acréscimo/Desconto fixo em R$
-  valorFixo        Decimal? @db.Decimal(14, 2)
+    const valorUnitMat = round2(mat);
+    const valorUnitMo  = round2(mo);
+    const totalItem    = round2((quantidade ?? 0) * ((valorUnitMat ?? 0) + (valorUnitMo ?? 0)));
 
-  observacao       String?
+    await prisma.estimativaItem.create({
+      data: {
+        estimativaId,
+        produtoId,
+        fornecedorId,
+        unidadeId,
+        usuarioId,
+        quantidade: Math.round((quantidade as number) * 1000) / 1000,
+        fontePrecoMat: fontePrecoMat as any,
+        fontePrecoMo:  fontePrecoMo  as any,
+        valorUnitMat,
+        valorUnitMo,
+        totalItem,
+      },
+    });
 
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+    const projeto = await prisma.estimativa.findUnique({
+      where: { id: estimativaId },
+      select: { projetoId: true },
+    });
 
-  @@index([usuarioId])
-  @@index([projetoId])
-  @@index([estimativaItemId])
-  @@index([produtoId])
+    if (projeto?.projetoId)
+      revalidatePath(`/projetos/${projeto.projetoId}/itens`);
+  } catch (err) {
+    console.error('[adicionarItem]', err);
+    await backToItensWithError(estimativaId, err);
+  }
 }
 
-/* =========================
-   RESUMO FINANCEIRO (LEGADO)
-   ========================= */
+export async function excluirItem(formData: FormData) {
+  const estimativaId = Number(formData.get('estimativaId'));
+  try {
+    const id = Number(formData.get('id'));
+    if (!id || !estimativaId) throw new Error('Item inválido');
 
-model ResumoProjeto {
-  projetoId   Int     @id
-  projeto     Projeto @relation(fields: [projetoId], references: [id], onDelete: Cascade)
-  recebemos   Decimal @db.Decimal(14, 2)
-  observacoes String?
+    const est = await prisma.estimativa.findUnique({
+      where: { id: estimativaId }, select: { projetoId: true }
+    });
+    await prisma.estimativaItem.delete({ where: { id } });
+
+    if (est?.projetoId)
+      revalidatePath(`/projetos/${est.projetoId}/itens`);
+  } catch (err) {
+    console.error('[excluirItem]', err);
+    await backToItensWithError(estimativaId, err);
+  }
 }
 
-/* =========================
-   USUÁRIOS
-   ========================= */
+export async function atualizarItem(formData: FormData) {
+  const estimativaId = Number(formData.get('estimativaId'));
+  try {
+    const usuarioId = await getMeUsuarioId();
 
-model Usuario {
-  id             Int     @id @default(autoincrement())
-  supabaseUserId String  @unique
-  nome           String
-  cpf            String? @unique
-  email          String  @unique
-  telefone       String?
-  cnpj           String?
-  role           Role    @default(USER)
+    const id           = Number(formData.get('id'));
+    const produtoId    = Number(formData.get('produtoId'));
+    const fornecedorId = Number(formData.get('fornecedorId'));
+    const unidadeId    = Number(formData.get('unidadeId'));
+    const quantidade   = parseNum(formData.get('quantidade'));
+    const fontePrecoMat = (String(formData.get('fontePrecoMat') || '') || null) as FonteMat;
+    const fontePrecoMo  = (String(formData.get('fontePrecoMo')  || '') || null) as FonteMo;
 
-  // relações "filhas"
-  unidades       UnidadeMedida[]
-  produtos       ProdutoServico[]
-  fornecedores   Fornecedor[]
-  vinculos       FornecedorProduto[]
-  projetos       Projeto[]
-  estimativas    Estimativa[]
-  itens          EstimativaItem[]
-  clientes       ClienteUsuario[]
+    if (!id || !estimativaId || !produtoId || !fornecedorId || !unidadeId)
+      throw new Error('Dados do item inválidos.');
+    if (quantidade == null || quantidade <= 0)
+      throw new Error('Quantidade inválida.');
 
-  // Relação inversa para ajustes criados pelo usuário (nomeada)
-  ajustesFinanceiros FinanceiroAjuste[] @relation("AjustesDoUsuario")
+    const [okUM, okProd, okForn] = await Promise.all([
+      prisma.unidadeMedida.findUnique({ where: { id: unidadeId }, select: { id: true } }),
+      prisma.produtoServico.findUnique({ where: { id: produtoId }, select: { id: true } }),
+      prisma.fornecedor.findUnique({ where: { id: fornecedorId }, select: { id: true } }),
+    ]);
+    if (!okUM)   throw new Error('Unidade de medida não encontrada.');
+    if (!okProd) throw new Error('Produto/serviço não encontrado.');
+    if (!okForn) throw new Error('Fornecedor não encontrado.');
 
-  @@index([email])
+    const { mat, mo } = await pickPrecoFromVinculo(fornecedorId, produtoId, fontePrecoMat, fontePrecoMo);
+
+    const valorUnitMat = round2(mat);
+    const valorUnitMo  = round2(mo);
+    const totalItem    = round2((quantidade ?? 0) * ((valorUnitMat ?? 0) + (valorUnitMo ?? 0)));
+
+    await prisma.estimativaItem.update({
+      where: { id },
+      data: {
+        fornecedorId,
+        unidadeId,
+        usuarioId,
+        quantidade: Math.round((quantidade as number) * 1000) / 1000,
+        fontePrecoMat: fontePrecoMat as any,
+        fontePrecoMo:  fontePrecoMo  as any,
+        valorUnitMat,
+        valorUnitMo,
+        totalItem,
+      },
+    });
+
+    const est = await prisma.estimativa.findUnique({
+      where: { id: estimativaId }, select: { projetoId: true }
+    });
+    if (est?.projetoId)
+      revalidatePath(`/projetos/${est.projetoId}/itens`);
+  } catch (err) {
+    console.error('[atualizarItem]', err);
+    await backToItensWithError(estimativaId, err);
+  }
 }
