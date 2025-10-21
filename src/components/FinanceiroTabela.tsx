@@ -1,7 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import { upsertAjustesFinanceiros } from "@/actions/financeiro";
+import { useMemo, useState } from "react";
 
 type Item = {
   id: number;
@@ -24,16 +23,23 @@ export default function FinanceiroTabela(props: {
   usuarioId: number;
   itens: Item[];
 }) {
-  const [rows, setRows] = useState(
-    props.itens.map((it) => ({
-      ...it,
-      checked: false,
-      percentual: it.ajuste?.percentual ?? null,
-      valorFixo: it.ajuste?.valorFixo ?? null,
-      observacao: it.ajuste?.observacao ?? "",
-      aplicarEmSimilares: false,
-    }))
+  const initial = useMemo(
+    () =>
+      props.itens.map((it) => ({
+        ...it,
+        checked: false as boolean,
+        percentual: it.ajuste?.percentual ?? null as number | null | "",
+        valorFixo: it.ajuste?.valorFixo ?? null as number | null | "",
+        observacao: it.ajuste?.observacao ?? "",
+        aplicarEmSimilares: false as boolean,
+      })),
+    [props.itens]
   );
+
+  const [rows, setRows] = useState(initial);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [ok, setOk] = useState(false);
 
   function update<K extends keyof (typeof rows)[number]>(id: number, key: K, val: any) {
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, [key]: val } : r)));
@@ -44,24 +50,50 @@ export default function FinanceiroTabela(props: {
   }
 
   async function salvarAjustesSelecionados() {
+    setSaving(true);
+    setError(null);
+    setOk(false);
+
     const payload = rows
       .filter((r) => r.checked)
       .map((r) => ({
         estimativaItemId: r.id,
-        percentual: r.percentual == null || r.percentual === "" ? null : Number(r.percentual),
-        valorFixo: r.valorFixo == null || r.valorFixo === "" ? null : Number(r.valorFixo),
+        percentual:
+          r.percentual === "" || r.percentual == null ? null : Number(String(r.percentual).replace(",", ".")),
+        valorFixo:
+          r.valorFixo === "" || r.valorFixo == null ? null : Number(String(r.valorFixo).replace(",", ".")),
         observacao: r.observacao?.trim() || null,
         aplicarEmSimilares: !!r.aplicarEmSimilares,
         grupoSimilar: r.grupoSimilar ?? null,
       }));
 
-    if (payload.length === 0) return;
+    if (payload.length === 0) {
+      setSaving(false);
+      return;
+    }
 
-    await upsertAjustesFinanceiros({
-      projetoId: props.projetoId,
-      usuarioId: props.usuarioId,
-      itens: payload,
-    });
+    try {
+      const res = await fetch("/api/financeiro/ajustes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projetoId: props.projetoId,
+          usuarioId: props.usuarioId,
+          itens: payload,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || `HTTP ${res.status}`);
+      }
+
+      setOk(true);
+    } catch (e: any) {
+      setError(e?.message || "Erro ao salvar ajustes");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -174,18 +206,26 @@ export default function FinanceiroTabela(props: {
         </table>
       </div>
 
-      <div className="flex justify-end gap-8">
+      <div className="flex items-center justify-between">
         <div className="text-xs text-neutral-500">
           Dica: marque os itens, preencha % ou R$, e clique em <b>Salvar ajustes</b>. Se marcar
           “aplicar em similares”, os itens com o mesmo nome serão ajustados juntos.
         </div>
-        <button
-          onClick={salvarAjustesSelecionados}
-          className="px-4 py-2 rounded-lg border border-neutral-900 bg-neutral-900 text-white font-semibold"
-          title="Cria registros em FinanceiroAjuste sem alterar a estimativa original"
-        >
-          Salvar ajustes
-        </button>
+
+        <div className="flex items-center gap-3">
+          {saving && <span className="text-xs">Salvando…</span>}
+          {ok && !saving && <span className="text-xs text-green-700">Ajustes salvos!</span>}
+          {error && !saving && <span className="text-xs text-red-700">{error}</span>}
+
+          <button
+            onClick={salvarAjustesSelecionados}
+            className="px-4 py-2 rounded-lg border border-neutral-900 bg-neutral-900 text-white font-semibold disabled:opacity-60"
+            disabled={saving}
+            title="Cria registros em FinanceiroAjuste sem alterar a estimativa original"
+          >
+            Salvar ajustes
+          </button>
+        </div>
       </div>
     </div>
   );
