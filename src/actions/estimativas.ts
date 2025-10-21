@@ -69,8 +69,8 @@ model ProdutoServico {
   fornecedores    FornecedorProduto[]
   itens           EstimativaItem[]
 
-  // 👇 relação inversa para ajustes financeiros por produto
-  financeirosAjustes FinanceiroAjuste[]
+  // Relação inversa para ajustes financeiros por produto (nomeada)
+  financeirosAjustes FinanceiroAjuste[] @relation("AjustesPorProduto")
 
   tipo        TipoItem @default(AMBOS)
   refPrecoP1  Decimal? @db.Decimal(12, 2)
@@ -183,13 +183,10 @@ model Projeto {
   cliente    ClienteUsuario? @relation(fields: [clienteId], references: [id], onDelete: SetNull)
 
   estimativas Estimativa[]
-
-  // 👇 financeiro por projeto
-  financeirosAjustes FinanceiroAjuste[]
-  financeiroResumo   FinanceiroResumo?
-
-  // legado (mantido se já usado em algum lugar)
   resumo      ResumoProjeto?
+
+  // Relação inversa para ajustes do projeto (nomeada)
+  ajustesFinanceiros FinanceiroAjuste[] @relation("AjustesDoProjeto")
 
   @@index([usuarioId, status])
   @@index([clienteId])
@@ -244,8 +241,8 @@ model EstimativaItem {
 
   totalItem     Decimal? @db.Decimal(12, 2)
 
-  // 👇 relação inversa para ajustes financeiros aplicados a este item
-  financeirosAjustes FinanceiroAjuste[]
+  // Relação inversa para ajustes por item (nomeada)
+  financeirosAjustes FinanceiroAjuste[] @relation("AjustesPorItem")
 
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -258,34 +255,27 @@ model EstimativaItem {
 }
 
 /* =========================
-   FINANCEIRO (NOVO)
+   FINANCEIRO (AJUSTES POR ITEM/PRODUTO/PROJETO)
    ========================= */
 
-/**
- * Ajustes financeiros aplicados:
- * - por ITEM (estimativaItemId)
- * - por PRODUTO específico (produtoId)
- * - por PROJETO (nenhum dos dois acima preenchido)
- * Permite aplicar % (markup/desconto) e/ou valor fixo.
- */
 model FinanceiroAjuste {
   id               Int      @id @default(autoincrement())
   usuarioId        Int
-  usuario          Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  usuario          Usuario  @relation("AjustesDoUsuario", fields: [usuarioId], references: [id], onDelete: Cascade)
 
   projetoId        Int
-  projeto          Projeto  @relation(fields: [projetoId], references: [id], onDelete: Cascade)
+  projeto          Projeto  @relation("AjustesDoProjeto", fields: [projetoId], references: [id], onDelete: Cascade)
 
   estimativaItemId Int?
-  estimativaItem   EstimativaItem? @relation(fields: [estimativaItemId], references: [id], onDelete: SetNull)
+  estimativaItem   EstimativaItem? @relation("AjustesPorItem", fields: [estimativaItemId], references: [id], onDelete: SetNull)
 
   produtoId        Int?
-  produto          ProdutoServico? @relation(fields: [produtoId], references: [id], onDelete: SetNull)
+  produto          ProdutoServico? @relation("AjustesPorProduto", fields: [produtoId], references: [id], onDelete: SetNull)
 
-  // +10.00 = +10%  |  -5.00 = -5%
+  // +10.000 = +10%  |  -5.000 = -5%
   percentual       Decimal? @db.Decimal(7, 3)
 
-  // Acrescimo/desconto fixo em R$
+  // Acréscimo/Desconto fixo em R$
   valorFixo        Decimal? @db.Decimal(14, 2)
 
   observacao       String?
@@ -297,35 +287,6 @@ model FinanceiroAjuste {
   @@index([projetoId])
   @@index([estimativaItemId])
   @@index([produtoId])
-}
-
-/**
- * Resumo “cacheado” por projeto para a tela Financeiro,
- * atualizado quando o usuário salva os ajustes. Pode ser
- * recalculado sob demanda.
- */
-model FinanceiroResumo {
-  id               Int      @id @default(autoincrement())
-  usuarioId        Int
-  usuario          Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-
-  projetoId        Int      @unique
-  projeto          Projeto  @relation(fields: [projetoId], references: [id], onDelete: Cascade)
-
-  subtotalMateriais Decimal  @default(0) @db.Decimal(14, 2)
-  subtotalMO        Decimal  @default(0) @db.Decimal(14, 2)
-  ajustesTotal      Decimal  @default(0) @db.Decimal(14, 2)
-  honorarios        Decimal  @default(0) @db.Decimal(14, 2)
-  totalOrcamento    Decimal  @default(0) @db.Decimal(14, 2)
-
-  recebemos         Decimal  @default(0) @db.Decimal(14, 2)
-  observacoes       String?
-
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-
-  @@index([usuarioId])
-  @@index([projetoId])
 }
 
 /* =========================
@@ -363,9 +324,8 @@ model Usuario {
   itens          EstimativaItem[]
   clientes       ClienteUsuario[]
 
-  // 👇 novas relações para financeiro
-  financeirosAjustes FinanceiroAjuste[]
-  financeiroResumos  FinanceiroResumo[]
+  // Relação inversa para ajustes criados pelo usuário (nomeada)
+  ajustesFinanceiros FinanceiroAjuste[] @relation("AjustesDoUsuario")
 
   @@index([email])
 }
