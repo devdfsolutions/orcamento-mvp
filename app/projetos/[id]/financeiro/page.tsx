@@ -142,7 +142,7 @@ export default async function Page({ params }: Props) {
                 marginTop: 6,
                 width: '100%',
                 padding: '8px 10px',
-                border: '1px solid '#ddd',
+                border: '1px solid #ddd', // <-- CORRIGIDO AQUI
                 borderRadius: 8,
                 fontWeight: 700,
               }}
@@ -228,7 +228,6 @@ export default async function Page({ params }: Props) {
         <h2 className="text-lg font-semibold">Honorários / Consultoria</h2>
         <form
           action={async (formData) => {
-            // import dinâmico para evitar erro se o arquivo ainda não existia em builds antigos
             const { aplicarHonorarios } = await import('@/actions/financeiro');
             await aplicarHonorarios(formData);
             revalidatePath(`/projetos/${projetoId}/financeiro`);
