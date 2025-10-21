@@ -182,10 +182,6 @@ model Projeto {
   estimativas Estimativa[]
   resumo      ResumoProjeto?
 
-  // Ajustes do Financeiro
-  financeirosAjustes FinanceiroAjuste[]
-  financeiroResumo   FinanceiroResumo?
-
   @@index([usuarioId, status])
   @@index([clienteId])
   @@index([usuarioId])
@@ -242,9 +238,6 @@ model EstimativaItem {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  // Ajustes por item (Financeiro)
-  financeirosAjustes FinanceiroAjuste[]
-
   @@index([usuarioId, estimativaId])
   @@index([produtoId])
   @@index([unidadeId])
@@ -253,87 +246,9 @@ model EstimativaItem {
 }
 
 /* =========================
-   FINANCEIRO (NOVO)
+   RESUMO FINANCEIRO
    ========================= */
 
-/**
- * Ajustes aplicados no Financeiro, SEM mudar o item original.
- * Escopos possíveis:
- *  - itemId: ajusta apenas aquela linha específica;
- *  - produtoId: ajusta todas as linhas do produto dentro do projeto;
- *  - tag: aplica por “grupo” nomeado (ex.: “Parafuso”, “Drywall”).
- *
- * percent   = variação percentual sobre o total do item (ex.: 10 = +10%, -5 = -5%)
- * valorFixo = ajuste absoluto somado ao total do item (pode ser negativo)
- *
- * Regra de cálculo (sugerida):
- *   totalAjustadoDoItem = totalItemOriginal
- *   → aplica percent (se existir)
- *   → aplica valorFixo (se existir)
- */
-model FinanceiroAjuste {
-  id         Int      @id @default(autoincrement())
-  usuarioId  Int
-  usuario    Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-
-  projetoId  Int
-  projeto    Projeto  @relation(fields: [projetoId], references: [id], onDelete: Cascade)
-
-  // Escopos (um OU outro OU ambos — você decide na action de gravação)
-  itemId     Int?
-  item       EstimativaItem? @relation(fields: [itemId], references: [id], onDelete: Cascade)
-
-  produtoId  Int?
-  produto    ProdutoServico? @relation(fields: [produtoId], references: [id])
-
-  tag        String?   // “Parafuso”, “Drywall”, etc.
-
-  percent    Decimal?  @db.Decimal(7, 2)   // ex.: 10.00 = +10%
-  valorFixo  Decimal?  @db.Decimal(14, 2)  // pode ser negativo (desconto)
-
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
-
-  @@index([usuarioId])
-  @@index([projetoId])
-  @@index([itemId])
-  @@index([produtoId])
-  @@index([tag])
-
-  // Evita duplicar ajuste de item para o mesmo projeto/usuário
-  @@unique([usuarioId, projetoId, itemId], map: "uniq_financeiro_item") // itemId pode ser null → unique só vale quando não-null
-}
-
-/**
- * Resumo e configurações do Financeiro por projeto.
- * Guarda observações e a taxa global (ou % ou R$).
- */
-model FinanceiroResumo {
-  projetoId       Int     @id
-  projeto         Projeto @relation(fields: [projetoId], references: [id], onDelete: Cascade)
-
-  usuarioId       Int
-  usuario         Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-
-  // Taxa global — um dos dois (ou ambos, se quiser permitir)
-  taxaGlobalPct   Decimal? @db.Decimal(7, 2)   // 10.00 = +10%
-  taxaGlobalValor Decimal? @db.Decimal(14, 2)  // ajuste absoluto final
-
-  observacoes     String?
-
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  @@index([usuarioId])
-}
-
-/* =========================
-   RESUMO FINANCEIRO (LEGADO)
-   =========================
-   Mantido para compatibilidade com sua tela atual.
-   Você pode continuar usando “recebemos” aqui,
-   e usar o FinanceiroResumo para taxa global/observações do PDF.
-*/
 model ResumoProjeto {
   projetoId   Int     @id
   projeto     Projeto @relation(fields: [projetoId], references: [id], onDelete: Cascade)
@@ -364,10 +279,6 @@ model Usuario {
   estimativas    Estimativa[]
   itens          EstimativaItem[]
   clientes       ClienteUsuario[]
-
-  // novos relacionamentos
-  financeirosAjustes FinanceiroAjuste[]
-  financeirosResumo  FinanceiroResumo[]
 
   @@index([email])
 }
