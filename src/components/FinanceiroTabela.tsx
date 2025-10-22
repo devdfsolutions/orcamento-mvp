@@ -142,7 +142,7 @@ export default function FinanceiroTabela(props: {
       <div className="overflow-x-auto rounded-lg border mt-3">
         <table className="min-w-full text-[13px]">
           <colgroup>
-            <col style={{ width: 28 }} />
+            <col style={{ width: 50 }} />
             <col style={{ width: 320 }} />
             <col style={{ width: 70 }} />
             <col style={{ width: 70 }} />
