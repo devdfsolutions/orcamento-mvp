@@ -1,10 +1,6 @@
 // app/projetos/[id]/financeiro/page.tsx
 import { prisma } from '@/lib/prisma';
-import {
-  salvarResumoFinanceiro,
-  aplicarHonorarios,
-  gerarPdfApresentacao,
-} from '@/actions/financeiro';
+import { salvarResumoFinanceiro, gerarPdfApresentacao } from '@/actions/financeiro';
 import FinanceiroTabela from '@/components/FinanceiroTabela';
 
 type Props = { params: { id: string } };
@@ -16,7 +12,7 @@ function toNum(v: any, fallback = 0): number {
 }
 
 async function getBaseFinanceiro(projetoId: number) {
-  // 1) Busca somente IDs das estimativas (aprovadas 1º; depois mais recentes)
+  // 1) Pega estimativas deste projeto (aprovada primeiro; depois mais recente)
   const estimativas = await prisma.estimativa.findMany({
     where: { projetoId },
     orderBy: [{ aprovada: 'desc' }, { criadaEm: 'desc' }],
@@ -27,7 +23,7 @@ async function getBaseFinanceiro(projetoId: number) {
   const estimativaId = escolhida?.id ?? null;
   const veioAprovada = !!escolhida?.aprovada;
 
-  // 2) Busca itens dessa estimativa (se houver) — nunca derruba a flag se der erro
+  // 2) Itens da estimativa escolhida (se houver)
   let itens:
     | Array<{
         id: number;
@@ -65,7 +61,7 @@ async function getBaseFinanceiro(projetoId: number) {
     }
   }
 
-  // 3) Resumo financeiro (legado) — também não derruba nada se falhar
+  // 3) Resumo financeiro (recebemos/observações)
   let recebemosNum = 0;
   let observacoes = '';
   try {
@@ -76,12 +72,11 @@ async function getBaseFinanceiro(projetoId: number) {
     console.error('[financeiro] erro buscando resumo', { projetoId, e });
   }
 
-  // 4) Ajustes (para pré-preencher)
+  // 4) Ajustes já gravados (para pré-preencher %/R$/obs por item)
   const ajustePorItem = new Map<
     number,
     { percentual: number | null; valorFixo: number | null; observacao: string | null }
   >();
-  let honorariosPercentual: number | null = null;
 
   try {
     const ajustes = await prisma.financeiroAjuste.findMany({
@@ -98,15 +93,13 @@ async function getBaseFinanceiro(projetoId: number) {
             observacao: aj.observacao ?? null,
           });
         }
-      } else if (aj.percentual != null && honorariosPercentual == null) {
-        honorariosPercentual = toNum(aj.percentual, null as any);
       }
     }
   } catch (e) {
     console.error('[financeiro] erro buscando ajustes', { projetoId, e });
   }
 
-  // 5) Normalização para a tabela
+  // 5) Normalização dos itens para a tabela
   const itensTabela = (itens || []).map((it) => {
     const q = toNum(it.quantidade, 0);
     const unitMat = toNum(it.valorUnitMat, 0);
@@ -134,13 +127,12 @@ async function getBaseFinanceiro(projetoId: number) {
   const aPagar = itensTabela.reduce((acc, it) => acc + toNum(it.subtotal, 0), 0);
 
   return {
-    temEstimativaParaExibir: !!estimativaId, // se tem id, a tabela deve aparecer
+    temEstimativaParaExibir: !!estimativaId,
     veioAprovada,
     aPagar,
     recebemos: recebemosNum,
     observacoes,
     itensTabela,
-    honorariosPercentual,
   };
 }
 
@@ -155,7 +147,6 @@ export default async function Page({ params }: Props) {
     recebemos,
     observacoes,
     itensTabela,
-    honorariosPercentual,
   } = await getBaseFinanceiro(projetoId);
 
   const lucro = recebemos - aPagar;
@@ -238,7 +229,7 @@ export default async function Page({ params }: Props) {
             style={{
               width: '100%',
               padding: '10px 12px',
-              border: '1px solid #ddd', // <- corrigido
+              border: '1px solid #ddd',
               borderRadius: 8,
             }}
             placeholder="Anotações livres..."
@@ -262,7 +253,7 @@ export default async function Page({ params }: Props) {
         </div>
       </form>
 
-      {/* TABELA DE ITENS */}
+      {/* TABELA DE ITENS (com ajustes, similares e honorários na toolbar) */}
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Ajustes por item</h2>
         {temEstimativaParaExibir ? (
@@ -273,44 +264,8 @@ export default async function Page({ params }: Props) {
             recebemos={recebemos}
           />
         ) : (
-          <div className="text-sm text-neutral-600">
-            Nenhuma estimativa para exibir.
-          </div>
+          <div className="text-sm text-neutral-600">Nenhuma estimativa para exibir.</div>
         )}
-      </section>
-
-      {/* HONORÁRIOS */}
-      <section className="space-y-2">
-        <h2 className="text-lg font-semibold">Honorários / Consultoria</h2>
-        <form action={aplicarHonorarios} className="flex items-end gap-8">
-          <input type="hidden" name="projetoId" value={projetoId} />
-          <input type="hidden" name="usuarioId" value={usuarioId} />
-          <div>
-            <label className="block text-xs text-neutral-600 mb-1">
-              % Honorários sobre o total
-            </label>
-            <input
-              name="percentual"
-              defaultValue={honorariosPercentual ?? ''}
-              placeholder="ex.: 10"
-              inputMode="decimal"
-              className="border rounded-md px-3 py-2 w-40"
-            />
-            <div className="text-xs text-neutral-500 mt-1">
-              Use valores positivos (ex.: 10 = +10%).
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs text-transparent mb-1">.</label>
-            <button
-              type="submit"
-              className="px-4 py-2 rounded-lg border border-neutral-900 bg-neutral-900 text-white font-semibold"
-            >
-              Aplicar honorários
-            </button>
-          </div>
-        </form>
       </section>
 
       {/* PDF */}
