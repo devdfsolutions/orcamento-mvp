@@ -130,7 +130,7 @@ export default function FinanceiroTabela(props: {
         <label className="text-sm text-neutral-600">
           Honorários (%)
           <input
-            className="ml-2 w-10 border rounded-md px-2 py-1 text-right"
+            className="ml-2 w-20 border rounded-md px-2 py-1 text-right"
             inputMode="decimal"
             placeholder="ex.: 10"
             value={honorariosPercentual}
@@ -143,6 +143,7 @@ export default function FinanceiroTabela(props: {
           />
         </label>
       </div>
+      <br>
 
       {/* Respiro entre toolbar e a tabela */}
       <div className="h-2" />
@@ -244,7 +245,7 @@ export default function FinanceiroTabela(props: {
           </tbody>
         </table>
       </div>
-
+<br>
       {/* Respiro entre tabela e totais */}
       <div className="h-4" />
 
