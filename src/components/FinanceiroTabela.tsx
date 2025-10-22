@@ -151,8 +151,7 @@ export default function FinanceiroTabela(props: {
             <col style={{ width: 80 }} />
             <col style={{ width: 80 }} />
             <col style={{ width: 100 }} />
-            <col style={{ width: 40 }} />
-            <col style={{ width: 300 }} />
+            <col style={{ width: 80 }} />
             <col style={{ width: 100 }} />
             <col style={{ width: 100 }} />
             <col style={{ width: 100 }} />
@@ -166,7 +165,6 @@ export default function FinanceiroTabela(props: {
               <th className="px-3 py-2 text-right">Unit.</th>
               <th className="px-3 py-2 text-right">Subtotal</th>
               <th className="px-3 py-2 text-right">% Ajuste</th>
-              <th className="px-3 py-2">Similares</th>
               <th className="px-3 py-2">Obs.</th>
               <th className="px-3 py-2 text-right">Ajustado</th>
               <th className="px-3 py-2 text-right">Δ</th>
