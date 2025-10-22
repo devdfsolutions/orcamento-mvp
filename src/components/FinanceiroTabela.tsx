@@ -30,26 +30,22 @@ function fmtBR(n: number) {
   return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
-export default function FinanceiroTabela({
-  projetoId,
-  usuarioId,
-  itens,
-  recebemos,
-}: {
+export default function FinanceiroTabela(props: {
   projetoId: number;
   usuarioId: number;
   itens: Item[];
   recebemos: number;
 }) {
   const [rows, setRows] = useState(
-    itens.map((it) => ({
+    props.itens.map((it) => ({
       ...it,
       checked: false,
       percentual: it.ajuste?.percentual ?? null,
       observacao: it.ajuste?.observacao ?? '',
     }))
   );
-  const [honorariosPreview, setHonorariosPreview] = useState('');
+
+  const [honorariosPreview, setHonorariosPreview] = useState<string>('');
 
   const { totalBase, totalAjustado, deltaTotal, totalComHonorarios, lucroPrevisto } =
     useMemo(() => {
@@ -61,10 +57,12 @@ export default function FinanceiroTabela({
         const novo = toNum(r.subtotal, 0) * (1 + pct / 100);
         return acc + novo;
       }, 0);
+
       const p = Number(String(honorariosPreview).replace(',', '.'));
       const temHonor = Number.isFinite(p);
       const comHonor = temHonor ? ajustado * (1 + p / 100) : ajustado;
-      const lucro = toNum(recebemos, 0) - comHonor;
+      const lucro = toNum(props.recebemos, 0) - comHonor;
+
       return {
         totalBase: base,
         totalAjustado: ajustado,
@@ -72,25 +70,32 @@ export default function FinanceiroTabela({
         totalComHonorarios: comHonor,
         lucroPrevisto: lucro,
       };
-    }, [rows, honorariosPreview, recebemos]);
+    }, [rows, honorariosPreview, props.recebemos]);
+
+  function update<K extends keyof (typeof rows)[number]>(id: number, key: K, val: any) {
+    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, [key]: val } : r)));
+  }
+
+  function toggleAll(checked: boolean) {
+    setRows((prev) => prev.map((r) => ({ ...r, checked })));
+  }
 
   async function salvarTudo() {
     const itensPayload = rows
       .filter((r) => r.checked)
       .map((r) => ({
         estimativaItemId: r.id,
-        percentual:
-          r.percentual == null || r.percentual === '' ? null : Number(r.percentual),
-        valorFixo: null,
+        percentual: r.percentual == null || r.percentual === '' ? null : Number(r.percentual),
+        valorFixo: null, // removido da UI
         observacao: r.observacao?.trim() || null,
-        aplicarEmSimilares: false,
+        aplicarEmSimilares: false, // removido da UI
         grupoSimilar: null,
       }));
 
     if (itensPayload.length > 0) {
       await upsertAjustesFinanceiros({
-        projetoId,
-        usuarioId,
+        projetoId: props.projetoId,
+        usuarioId: props.usuarioId,
         itens: itensPayload,
       });
     }
@@ -98,8 +103,8 @@ export default function FinanceiroTabela({
     const p = Number(String(honorariosPreview).replace(',', '.'));
     if (Number.isFinite(p)) {
       await aplicarHonorariosDirect({
-        projetoId,
-        usuarioId,
+        projetoId: props.projetoId,
+        usuarioId: props.usuarioId,
         percentual: p,
       });
     }
@@ -110,13 +115,15 @@ export default function FinanceiroTabela({
       {/* toolbar */}
       <div className="flex flex-wrap items-center gap-3">
         <button
-          onClick={() => setRows((p) => p.map((r) => ({ ...r, checked: true })))}
+          type="button"
+          onClick={() => toggleAll(true)}
           className="px-2.5 py-1.5 rounded-md border bg-white text-sm"
         >
           Selecionar todos
         </button>
         <button
-          onClick={() => setRows((p) => p.map((r) => ({ ...r, checked: false })))}
+          type="button"
+          onClick={() => toggleAll(false)}
           className="px-2.5 py-1.5 rounded-md border bg-white text-sm"
         >
           Limpar seleção
@@ -126,130 +133,113 @@ export default function FinanceiroTabela({
           <span className="text-xs text-neutral-600">Honorários (%)</span>
           <input
             className="border rounded-md text-right text-xs leading-none"
-            style={{ width: 42, height: 24, padding: '0 4px' }}
+            style={{ width: 42, minWidth: 42, height: 24, padding: '0 4px' }}
             inputMode="decimal"
             placeholder="ex.: 10"
             value={honorariosPreview}
-            onChange={(e) => setHonorariosPreview(e.target.value)}
+            onChange={(e) => setHonorariosPreview(e.currentTarget.value)}
           />
         </div>
       </div>
 
-      {/* tabela */}
-      <div className="overflow-x-auto rounded-lg border border-gray-200 mt-4">
+      {/* TABELA */}
+      <div className="overflow-x-auto rounded-lg border mt-2">
         <table
-          className="min-w-full text-[13px] border-collapse"
-          style={{ borderSpacing: 0 }}
+          className="min-w-full text-[13px]"
+          style={{ tableLayout: 'fixed', borderCollapse: 'separate', borderSpacing: 0 }}
         >
-          <thead className="bg-neutral-50 text-xs text-neutral-700">
-            <tr className="border-b border-gray-200">
-              <th className="px-3 py-2 text-left border-r border-gray-200">Sel.</th>
-              <th className="px-3 py-2 text-left border-r border-gray-200 w-[280px]">
-                Item
-              </th>
-              <th className="px-3 py-2 text-right border-r border-gray-200 w-[70px]">
-                Qtd
-              </th>
-              <th className="px-3 py-2 text-right border-r border-gray-200 w-[90px]">
-                Unit.
-              </th>
-              <th className="px-3 py-2 text-right border-r border-gray-200 w-[110px]">
-                Subtotal
-              </th>
-              <th className="px-3 py-2 text-right border-r border-gray-200 w-[80px]">
-                % Ajuste
-              </th>
-              <th className="px-3 py-2 text-left border-r border-gray-200 w-[220px]">
-                Obs.
-              </th>
-              <th className="px-3 py-2 text-right border-r border-gray-200 w-[110px]">
-                Ajustado
-              </th>
-              <th className="px-3 py-2 text-right w-[70px]">Δ</th>
+          {/* Larguras fixas para cada coluna */}
+          <colgroup>
+            <col style={{ width: 52 }} />   {/* Sel. */}
+            <col style={{ width: 340 }} />  {/* Item */}
+            <col style={{ width: 66 }} />   {/* Qtd */}
+            <col style={{ width: 64 }} />   {/* Unit. */}
+            <col style={{ width: 110 }} />  {/* Subtotal */}
+            <col style={{ width: 90 }} />   {/* % Ajuste */}
+            <col style={{ width: 240 }} />  {/* Obs. */}
+            <col style={{ width: 120 }} />  {/* Ajustado */}
+            <col style={{ width: 90 }} />   {/* Δ */}
+          </colgroup>
+
+          <thead className="bg-neutral-50 text-xs">
+            <tr>
+              <th className="px-3 py-2 text-left border-r border-neutral-200">Sel.</th>
+              <th className="px-3 py-2 text-left border-r border-neutral-200">Item</th>
+              <th className="px-3 py-2 text-right border-r border-neutral-200">Qtd</th>
+              <th className="px-3 py-2 text-right border-r border-neutral-200">Unit.</th>
+              <th className="px-3 py-2 text-right border-r border-neutral-200">Subtotal</th>
+              <th className="px-3 py-2 text-right border-r border-neutral-200">% Ajuste</th>
+              <th className="px-3 py-2 text-left border-r border-neutral-200">Obs.</th>
+              <th className="px-3 py-2 text-right border-r border-neutral-200">Ajustado</th>
+              <th className="px-3 py-2 text-right">Δ</th>
             </tr>
           </thead>
 
           <tbody>
-            {rows.map((r) => {
+            {rows.map((r, idx) => {
               const pct =
-                r.percentual == null || r.percentual === ''
-                  ? null
-                  : Number(r.percentual);
+                r.percentual == null || r.percentual === '' ? null : Number(r.percentual);
               const base = toNum(r.subtotal, 0);
-              const ajustado =
-                pct == null || !Number.isFinite(pct) ? base : base * (1 + pct / 100);
+              const ajustado = pct == null || !Number.isFinite(pct) ? base : base * (1 + pct / 100);
               const delta = ajustado - base;
+
               return (
-                <tr
-                  key={r.id}
-                  className="border-b border-gray-200 hover:bg-gray-50 transition-colors"
-                >
-                  <td className="px-3 py-2 text-center border-r border-gray-200">
+                <tr key={r.id} className="align-top">
+                  <td className="px-3 py-2 border-t border-neutral-200 border-r">
                     <input
                       type="checkbox"
                       checked={r.checked}
-                      onChange={(e) =>
-                        setRows((p) =>
-                          p.map((x) =>
-                            x.id === r.id ? { ...x, checked: e.target.checked } : x
-                          )
-                        )
-                      }
+                      onChange={(e) => update(r.id, 'checked', e.currentTarget.checked)}
                     />
                   </td>
-                  <td className="px-3 py-2 border-r border-gray-200">
-                    <div className="font-medium">{r.nome}</div>
+
+                  <td className="px-3 py-2 border-t border-neutral-200 border-r">
+                    <div className="font-medium truncate">{r.nome}</div>
                     <div className="text-[11px] text-neutral-500">
                       {r.tipo} {r.unidade ? `• ${r.unidade}` : ''}
                     </div>
                   </td>
-                  <td className="px-3 py-2 text-right border-r border-gray-200">
+
+                  <td className="px-3 py-2 text-right border-t border-neutral-200 border-r">
                     {r.quantidade}
                   </td>
-                  <td className="px-3 py-2 text-right border-r border-gray-200">
+                  <td className="px-3 py-2 text-right border-t border-neutral-200 border-r">
                     {fmtBR(r.precoUnitario)}
                   </td>
-                  <td className="px-3 py-2 text-right border-r border-gray-200">
+                  <td className="px-3 py-2 text-right border-t border-neutral-200 border-r">
                     {fmtBR(base)}
                   </td>
-                  <td className="px-3 py-2 text-right border-r border-gray-200">
-                    <input
-                      className="border rounded-md text-right text-xs leading-none"
-                      style={{ width: 38, height: 22, padding: '0 4px' }}
-                      inputMode="decimal"
-                      placeholder="%"
-                      value={r.percentual ?? ''}
-                      onChange={(e) =>
-                        setRows((p) =>
-                          p.map((x) =>
-                            x.id === r.id
-                              ? { ...x, percentual: e.target.value }
-                              : x
-                          )
-                        )
-                      }
-                    />
+
+                  {/* % Ajuste (input estreito e travado) */}
+                  <td className="px-3 py-2 text-right border-t border-neutral-200 border-r">
+                    <div className="flex justify-end">
+                      <input
+                        className="border rounded-md text-right text-xs leading-none"
+                        style={{ width: 42, minWidth: 42, height: 24, padding: '0 4px' }}
+                        inputMode="decimal"
+                        placeholder="%"
+                        value={r.percentual ?? ''}
+                        onChange={(e) => update(r.id, 'percentual', e.currentTarget.value)}
+                      />
+                    </div>
                   </td>
-                  <td className="px-3 py-2 border-r border-gray-200">
+
+                  {/* Observações */}
+                  <td className="px-3 py-2 border-t border-neutral-200 border-r">
                     <input
                       className="border rounded-md px-2 py-1 text-sm w-full"
                       placeholder="Observação"
                       value={r.observacao ?? ''}
-                      onChange={(e) =>
-                        setRows((p) =>
-                          p.map((x) =>
-                            x.id === r.id
-                              ? { ...x, observacao: e.target.value }
-                              : x
-                          )
-                        )
-                      }
+                      onChange={(e) => update(r.id, 'observacao', e.currentTarget.value)}
                     />
                   </td>
-                  <td className="px-3 py-2 text-right border-r border-gray-200">
+
+                  <td className="px-3 py-2 text-right border-t border-neutral-200 border-r">
                     {fmtBR(ajustado)}
                   </td>
-                  <td className="px-3 py-2 text-right">{fmtBR(delta)}</td>
+                  <td className="px-3 py-2 text-right border-t border-neutral-200">
+                    {fmtBR(delta)}
+                  </td>
                 </tr>
               );
             })}
@@ -257,15 +247,15 @@ export default function FinanceiroTabela({
         </table>
       </div>
 
-      {/* espaçamento e divisória */}
-      <div className="mt-6 border-t border-gray-300 pt-3" />
+      {/* respirinho entre tabela e totais */}
+      <div className="h-2" />
 
-      {/* totais */}
-      <div className="grid gap-1 text-sm">
+      {/* Totais + botão */}
+      <div className="grid gap-2 text-sm">
         <div>Fornecedores (base): {fmtBR(totalBase)}</div>
         <div>
           Fornecedores (ajustado): {fmtBR(totalAjustado)}{' '}
-          <span className="ml-1 text-neutral-500">Δ {fmtBR(deltaTotal)}</span>
+          <span className="ml-1">Δ {fmtBR(deltaTotal)}</span>
         </div>
         <div>
           Com honorários (prévia):{' '}
@@ -273,15 +263,16 @@ export default function FinanceiroTabela({
             ? fmtBR(totalComHonorarios)
             : fmtBR(totalAjustado)}
         </div>
-        <div className="font-semibold">
-          Lucro previsto: {fmtBR(lucroPrevisto)}
+        <div className="font-semibold">Lucro previsto: {fmtBR(lucroPrevisto)}</div>
+
+        <div className="mt-2">
+          <button
+            onClick={salvarTudo}
+            className="px-4 py-2 rounded-lg border border-neutral-900 bg-neutral-900 text-white font-semibold"
+          >
+            Salvar ajustes
+          </button>
         </div>
-        <button
-          onClick={salvarTudo}
-          className="mt-2 px-4 py-2 rounded-lg border border-neutral-900 bg-neutral-900 text-white font-semibold w-fit"
-        >
-          Salvar ajustes
-        </button>
       </div>
     </div>
   );
