@@ -130,7 +130,7 @@ export default function FinanceiroTabela(props: {
         <label className="text-sm text-neutral-600">
           Honorários (%)
           <input
-            className="ml-2 w-20 border rounded-md px-2 py-1 text-right"
+            className="ml-2 w-10 border rounded-md px-2 py-1 text-right"
             inputMode="decimal"
             placeholder="ex.: 10"
             value={honorariosPercentual}
