@@ -208,7 +208,7 @@ export default function FinanceiroTabela(props: {
                     <div className="flex items-center justify-end gap-1">
                       <input
                         className="border rounded-md px-1 text-right text-xs leading-none"
-                        style={{ width: '35px', minWidth: '35px' }}
+                        style={{ width: '50px', minWidth: '50px' }}
                         inputMode="decimal"
                         placeholder="%"
                         value={r.percentual ?? ''}
