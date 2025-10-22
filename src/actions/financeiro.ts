@@ -4,13 +4,6 @@
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 
-// helper
-function toNum(v: any, fallback = 0): number {
-  if (v == null) return fallback;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : fallback;
-}
-
 export async function salvarResumoFinanceiro(formData: FormData) {
   const projetoId = Number(formData.get('projetoId'));
   const recebemos = Number(String(formData.get('recebemos') || '0').replace(',', '.'));
@@ -25,7 +18,7 @@ export async function salvarResumoFinanceiro(formData: FormData) {
   revalidatePath(`/projetos/${projetoId}/financeiro`);
 }
 
-// ===================== AJUSTES =====================
+/* ===================== AJUSTES POR ITEM ===================== */
 
 type AjusteItemPayload = {
   estimativaItemId: number;
@@ -33,59 +26,54 @@ type AjusteItemPayload = {
   valorFixo: number | null;
   observacao: string | null;
   aplicarEmSimilares: boolean;
-  grupoSimilar: string | null; // aqui será o nome do produto
+  grupoSimilar: string | null;
 };
 
 export async function upsertAjustesFinanceiros(input: {
   projetoId: number;
-  usuarioId: number;
+  usuarioId: number; // se vier 0/NaN, usamos o dono do projeto
   itens: AjusteItemPayload[];
 }) {
   const { projetoId, usuarioId, itens } = input;
 
-  // Busca estimativa aprovada e nomes dos produtos para permitir "similares"
+  // fallback: dono do projeto
+  const projeto = await prisma.projeto.findUnique({
+    where: { id: projetoId },
+    select: { usuarioId: true },
+  });
+  const usuarioIdEfetivo = Number.isFinite(usuarioId) && usuarioId > 0
+    ? usuarioId
+    : (projeto?.usuarioId ?? 1); // último fallback defensivo
+
   const estimativa = await prisma.estimativa.findFirst({
-    where: { projetoId, aprovada: true },
+    where: { projetoId },
     include: {
       itens: {
-        select: {
-          id: true,
-          produto: { select: { nome: true } },
-        },
+        include: { produto: { select: { nome: true } } },
       },
     },
   });
-
   if (!estimativa) {
-    revalidatePath(`/projetos/${projetoId}/financeiro`);
-    return;
+    return { ok: false, message: 'Estimativa não encontrada.' };
   }
-
-  // Mapas auxiliares
-  const itemProdutoNome = new Map<number, string | null>(
-    estimativa.itens.map((i) => [i.id, i.produto?.nome ?? null])
-  );
 
   const creates: Parameters<typeof prisma.financeiroAjuste.create>[] = [];
 
   for (const it of itens) {
-    // sempre aplica no item selecionado
-    const alvoIds = new Set<number>([it.estimativaItemId]);
+    let alvoIds: number[] = [it.estimativaItemId];
 
-    // aplica em similares pelo mesmo nome de produto (se pedido)
     if (it.aplicarEmSimilares && it.grupoSimilar) {
-      for (const row of estimativa.itens) {
-        const nome = itemProdutoNome.get(row.id);
-        if (nome && nome === it.grupoSimilar) {
-          alvoIds.add(row.id);
-        }
-      }
+      const similares = estimativa.itens.filter(
+        (row) => (row.produto?.nome || (row as any).nome || null) === it.grupoSimilar
+      );
+      const similaresIds = similares.map((s) => s.id);
+      alvoIds = Array.from(new Set([...alvoIds, ...similaresIds]));
     }
 
-    for (const alvoId of Array.from(alvoIds)) {
+    for (const alvoId of alvoIds) {
       creates.push({
         data: {
-          usuarioId: Number.isFinite(usuarioId) ? usuarioId : 0,
+          usuarioId: usuarioIdEfetivo,
           projetoId,
           estimativaItemId: alvoId,
           percentual: it.percentual != null ? it.percentual : null,
@@ -101,23 +89,45 @@ export async function upsertAjustesFinanceiros(input: {
   }
 
   revalidatePath(`/projetos/${projetoId}/financeiro`);
+  return { ok: true };
 }
 
+/* ===================== HONORÁRIOS ===================== */
+
+// uso via <form action={aplicarHonorarios}>
 export async function aplicarHonorarios(formData: FormData) {
   const projetoId = Number(formData.get('projetoId'));
   const usuarioId = Number(formData.get('usuarioId') || 0);
   const percentual = Number(String(formData.get('percentual') || '').replace(',', '.'));
 
+  return aplicarHonorariosDirect({ projetoId, usuarioId, percentual });
+}
+
+// uso direto no client (toolbar)
+export async function aplicarHonorariosDirect(input: {
+  projetoId: number;
+  usuarioId: number;
+  percentual: number;
+}) {
+  const { projetoId, usuarioId, percentual } = input;
+
+  const projeto = await prisma.projeto.findUnique({
+    where: { id: projetoId },
+    select: { usuarioId: true },
+  });
+  const usuarioIdEfetivo = Number.isFinite(usuarioId) && usuarioId > 0
+    ? usuarioId
+    : (projeto?.usuarioId ?? 1);
+
   if (!Number.isFinite(percentual)) {
     revalidatePath(`/projetos/${projetoId}/financeiro`);
-    return;
+    return { ok: false, message: 'Percentual inválido.' };
   }
 
   await prisma.financeiroAjuste.create({
     data: {
-      usuarioId: Number.isFinite(usuarioId) ? usuarioId : 0,
+      usuarioId: usuarioIdEfetivo,
       projetoId,
-      // ajuste no nível do projeto (sem estimativaItemId/produtoId)
       percentual,
       valorFixo: null,
       observacao: 'HONORARIOS',
@@ -125,11 +135,13 @@ export async function aplicarHonorarios(formData: FormData) {
   });
 
   revalidatePath(`/projetos/${projetoId}/financeiro`);
+  return { ok: true };
 }
 
-// Placeholder do PDF (mantém fluxo estável)
+/* ===================== PDF (placeholder seguro) ===================== */
 export async function gerarPdfApresentacao(formData: FormData) {
   const projetoId = Number(formData.get('projetoId'));
-  // TODO: montar o PDF com os valores ajustados
+  // TODO: implementar geração do PDF
   revalidatePath(`/projetos/${projetoId}/financeiro`);
+  return { ok: true };
 }
