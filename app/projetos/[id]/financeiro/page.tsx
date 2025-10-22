@@ -18,39 +18,63 @@ function toNum(v: any, fallback = 0): number {
 
 async function getBaseFinanceiro(projetoId: number) {
   try {
-    // Estimativa aprovada + itens (nomes reais do schema)
-    const estimativa = await prisma.estimativa.findFirst({
-      where: { projetoId, aprovada: true },
-      include: {
-        itens: {
-          select: {
-            id: true,
-            quantidade: true,      // Decimal(12,3)
-            valorUnitMat: true,    // Decimal?
-            valorUnitMo: true,     // Decimal?
-            totalItem: true,       // Decimal?
-            produto: {             // relação real
-              select: { nome: true, tipo: true },
-            },
-            unidade: {
-              select: { sigla: true },
+    // 1) Tenta buscar a estimativa APROVADA
+    let estimativa =
+      await prisma.estimativa.findFirst({
+        where: { projetoId, aprovada: true },
+        include: {
+          itens: {
+            select: {
+              id: true,
+              quantidade: true,      // Decimal(12,3)
+              valorUnitMat: true,    // Decimal?
+              valorUnitMo: true,     // Decimal?
+              totalItem: true,       // Decimal?
+              produto: {             // relação real
+                select: { nome: true, tipo: true },
+              },
+              unidade: {
+                select: { sigla: true },
+              },
             },
           },
         },
-      },
-    });
+      });
+
+    let veioAprovada = !!estimativa;
+
+    // 2) Se não houver aprovada, CAI PARA A MAIS RECENTE do projeto
+    if (!estimativa) {
+      estimativa = await prisma.estimativa.findFirst({
+        where: { projetoId },
+        orderBy: { criadaEm: 'desc' },
+        include: {
+          itens: {
+            select: {
+              id: true,
+              quantidade: true,
+              valorUnitMat: true,
+              valorUnitMo: true,
+              totalItem: true,
+              produto: { select: { nome: true, tipo: true } },
+              unidade: { select: { sigla: true } },
+            },
+          },
+        },
+      });
+    }
 
     const itens = estimativa?.itens ?? [];
 
-    // Total a pagar (fornecedores) a partir do totalItem
+    // 3) Total a pagar (fornecedores) a partir do totalItem
     const aPagar = itens.reduce((acc, it) => acc + toNum(it.totalItem, 0), 0);
 
-    // Resumo financeiro (legado)
+    // 4) Resumo financeiro (legado)
     const resumo = await prisma.resumoProjeto.findUnique({
       where: { projetoId },
     });
 
-    // Ajustes existentes (para pré-preencher)
+    // 5) Ajustes existentes (para pré-preencher)
     const ajustes = await prisma.financeiroAjuste.findMany({
       where: { projetoId },
       orderBy: { updatedAt: 'desc' },
@@ -76,7 +100,7 @@ async function getBaseFinanceiro(projetoId: number) {
       }
     }
 
-    // Normalização para a tabela
+    // 6) Normalização para a tabela
     const itensTabela = itens.map((it) => {
       const q = toNum(it.quantidade, 0);
       const unitMat = toNum(it.valorUnitMat, 0);
@@ -96,9 +120,10 @@ async function getBaseFinanceiro(projetoId: number) {
 
       return {
         id: it.id,
-        tipo: (it.produto?.tipo as 'PRODUTO' | 'SERVICO' | 'AMBOS') === 'PRODUTO'
-          ? 'PRODUTO'
-          : 'SERVICO', // para exibição; seu enum tem AMBOS também
+        tipo:
+          (it.produto?.tipo as 'PRODUTO' | 'SERVICO' | 'AMBOS') === 'PRODUTO'
+            ? 'PRODUTO'
+            : 'SERVICO', // para exibição; seu enum tem AMBOS também
         nome: it.produto?.nome || `Item #${it.id}`,
         quantidade: q,
         unidade: it.unidade?.sigla ?? null,
@@ -111,7 +136,9 @@ async function getBaseFinanceiro(projetoId: number) {
     });
 
     return {
-      temEstimativaAprovada: !!estimativa,
+      // se não tem aprovada mas tem estimativa recente, ainda queremos renderizar a tabela
+      temEstimativaParaExibir: !!estimativa,
+      veioAprovada,
       aPagar,
       recebemos: toNum(resumo?.recebemos, 0),
       observacoes: resumo?.observacoes || '',
@@ -121,7 +148,8 @@ async function getBaseFinanceiro(projetoId: number) {
   } catch (e) {
     console.error('[financeiro:getBaseFinanceiro] erro', e);
     return {
-      temEstimativaAprovada: false,
+      temEstimativaParaExibir: false,
+      veioAprovada: false,
       aPagar: 0,
       recebemos: 0,
       observacoes: '',
@@ -136,7 +164,8 @@ export default async function Page({ params }: Props) {
   const usuarioId = 0; // quando tiver auth, preencher com o usuário logado
 
   const {
-    temEstimativaAprovada,
+    temEstimativaParaExibir,
+    veioAprovada,
     aPagar,
     recebemos,
     observacoes,
@@ -152,9 +181,9 @@ export default async function Page({ params }: Props) {
         projetos/{projetoId}/financeiro
       </h1>
 
-      {!temEstimativaAprovada ? (
-        <p style={{ color: '#b00', marginTop: 12 }}>
-          ⚠️ Este projeto ainda não tem uma estimativa <b>aprovada</b> ou houve um erro ao carregar os itens.
+      {!veioAprovada ? (
+        <p style={{ color: '#b8860b', marginTop: 12 }}>
+          ⚠️ <b>Sem estimativa aprovada.</b> Exibindo a <b>estimativa mais recente</b> do projeto.
         </p>
       ) : null}
 
@@ -190,7 +219,7 @@ export default async function Page({ params }: Props) {
             <div style={{ fontSize: 12, color: '#666' }}>A pagar fornecedores (R$)</div>
             <div style={{ marginTop: 10, fontWeight: 700 }}>{aPagar.toFixed(2)}</div>
             <div style={{ marginTop: 6, fontSize: 12, color: '#666' }}>
-              Calculado da estimativa aprovada
+              Calculado da estimativa atual
             </div>
           </div>
 
@@ -247,7 +276,7 @@ export default async function Page({ params }: Props) {
       {/* TABELA DE ITENS (ajustes) */}
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Ajustes por item</h2>
-        {temEstimativaAprovada ? (
+        {temEstimativaParaExibir ? (
           <FinanceiroTabela
             projetoId={projetoId}
             usuarioId={usuarioId}
@@ -255,7 +284,7 @@ export default async function Page({ params }: Props) {
           />
         ) : (
           <div className="text-sm text-neutral-600">
-            Aguardando estimativa aprovada para listar os itens.
+            Nenhuma estimativa encontrada para este projeto ainda.
           </div>
         )}
       </section>
