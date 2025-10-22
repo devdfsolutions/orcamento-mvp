@@ -270,6 +270,7 @@ export default async function Page({ params }: Props) {
             projetoId={projetoId}
             usuarioId={usuarioId}
             itens={itensTabela}
+            recebemos={recebemos}
           />
         ) : (
           <div className="text-sm text-neutral-600">
