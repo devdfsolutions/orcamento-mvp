@@ -118,7 +118,7 @@ export default function FinanceiroTabela(props: {
         <label className="text-sm text-neutral-600 flex items-center gap-2">
           Honorários (%)
           <input
-            className="w-14 h-6 border rounded-md px-1 text-right text-xs leading-none"
+            className="w-5 h-6 border rounded-md px-1 text-right text-xs leading-none"
             inputMode="decimal"
             placeholder="ex.: 10"
             value={honorariosPercentual}
@@ -207,7 +207,7 @@ export default function FinanceiroTabela(props: {
                   <td className="px-3 py-3 text-right align-middle">
                     <div className="flex items-center justify-end gap-1">
                       <input
-                        className="w-10 h-6 border rounded-md px-1 text-right text-xs leading-none"
+                        className="w-5 h-6 border rounded-md px-1 text-right text-xs leading-none"
                         inputMode="decimal"
                         placeholder="%"
                         value={r.percentual ?? ''}
