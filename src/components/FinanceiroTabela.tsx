@@ -238,7 +238,8 @@ export default function FinanceiroTabela(props: {
 
                   <td className="px-3 py-3 align-middle">
                     <input
-                      className="w-40 border rounded-md px-2 py-1 text-sm"
+                      className="border rounded-md px-1 text-right text-xs leading-none"
+                      style={{ width: '150px', minWidth: '150px' }}
                       placeholder="Observação"
                       value={r.observacao ?? ''}
                       onChange={(e) => update(r.id, 'observacao', e.currentTarget.value)}
