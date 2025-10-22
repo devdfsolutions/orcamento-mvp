@@ -53,7 +53,7 @@ export default function FinanceiroTabela(props: {
     setRows((prev) => prev.map((r) => ({ ...r, checked })));
   }
 
-  // ===== CÁLCULO EM TEMPO REAL =====
+  /* ======== CÁLCULOS AO VIVO ======== */
   const baseTotal = useMemo(
     () => rows.reduce((acc, r) => acc + (r.subtotal || 0), 0),
     [rows]
@@ -79,6 +79,7 @@ export default function FinanceiroTabela(props: {
     const adjusted: Record<number, number> = {};
     rows.forEach((r) => (adjusted[r.id] = calcItem(r)));
 
+    // aplicar em similares
     rows.forEach((r) => {
       if (!r.aplicarEmSimilares || !r.grupoSimilar) return;
       const siblings = byName.get(r.grupoSimilar) || [];
@@ -106,6 +107,7 @@ export default function FinanceiroTabela(props: {
 
   const lucroPrevisto = (props.recebemos ?? 0) - totalComHonorarios;
 
+  /* ======== ACTIONS ======== */
   async function salvarAjustesSelecionados() {
     const payload = rows
       .filter((r) => r.checked)
@@ -159,35 +161,51 @@ export default function FinanceiroTabela(props: {
     });
   }
 
+  /* ======== UI ======== */
   return (
     <div className="space-y-4">
-      {/* Toolbar compacta */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <button className="px-2.5 py-1.5 rounded-md border text-sm" onClick={() => toggleAll(true)}>
-            Selecionar todos
-          </button>
-          <button className="px-2.5 py-1.5 rounded-md border text-sm" onClick={() => toggleAll(false)}>
-            Limpar seleção
-          </button>
-        </div>
+      {/* Toolbar */}
+      <div className="rounded-lg border p-3">
+        <div className="flex flex-wrap items-center gap-3 md:gap-4">
+          {/* Ações em lote */}
+          <div className="flex items-center gap-2">
+            <button
+              className="h-8 px-3 rounded-md border text-sm"
+              onClick={() => toggleAll(true)}
+              type="button"
+            >
+              Selecionar todos
+            </button>
+            <button
+              className="h-8 px-3 rounded-md border text-sm"
+              onClick={() => toggleAll(false)}
+              type="button"
+            >
+              Limpar seleção
+            </button>
+          </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <label className="text-sm text-neutral-700 flex items-center gap-2">
-            Prévia honorários (%)
+          <div className="hidden md:block w-px h-6 bg-neutral-200" />
+
+          {/* Prévia + aplicar honorários */}
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-neutral-700">
+              Prévia honorários (%)
+            </label>
             <input
-              className="w-20 border rounded-md px-2 py-1 text-right"
+              className="h-8 w-20 border rounded-md px-2 text-right text-sm"
               inputMode="decimal"
               placeholder="ex.: 10"
               value={honorariosPreview ?? ''}
-              onChange={(e) => setHonorariosPreview(parseDec(e.currentTarget.value))}
+              onChange={(e) => {
+                const v = parseDec(e.currentTarget.value);
+                setHonorariosPreview(v);
+              }}
               title="Só pré-visualização (não grava)."
             />
-          </label>
-
-          <div className="flex items-center gap-2">
+            <span className="text-neutral-300">|</span>
             <input
-              className="w-20 border rounded-md px-2 py-1 text-right"
+              className="h-8 w-20 border rounded-md px-2 text-right text-sm"
               inputMode="decimal"
               placeholder="ex.: 10"
               value={honorariosToSave}
@@ -197,45 +215,52 @@ export default function FinanceiroTabela(props: {
             <button
               onClick={aplicarHonorarios}
               disabled={isPending}
-              className="px-3 py-2 rounded-lg border border-neutral-900 bg-white text-neutral-900 font-semibold disabled:opacity-60"
+              className="h-8 px-3 rounded-md border border-neutral-900 bg-white text-neutral-900 text-sm font-semibold disabled:opacity-60"
               title="Grava um ajuste de honorários para o projeto"
+              type="button"
             >
-              {isPending ? 'Gravando…' : 'Aplicar honorários (gravar)'}
+              {isPending ? 'Gravando…' : 'Aplicar honorários'}
             </button>
           </div>
 
-          <button
-            onClick={salvarAjustesSelecionados}
-            disabled={isPending}
-            className="px-4 py-2 rounded-lg border border-neutral-900 bg-neutral-900 text-white font-semibold disabled:opacity-60"
-            title="Cria registros em FinanceiroAjuste sem alterar a estimativa original"
-          >
-            {isPending ? 'Salvando…' : 'Salvar ajustes'}
-          </button>
+          <div className="hidden md:block w-px h-6 bg-neutral-200" />
+
+          {/* Salvar ajustes */}
+          <div className="ml-auto">
+            <button
+              onClick={salvarAjustesSelecionados}
+              disabled={isPending}
+              className="h-8 px-4 rounded-md border border-neutral-900 bg-neutral-900 text-white text-sm font-semibold disabled:opacity-60"
+              title="Cria registros em FinanceiroAjuste sem alterar a estimativa original"
+              type="button"
+            >
+              {isPending ? 'Salvando…' : 'Salvar ajustes'}
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Tabela */}
       <div className="overflow-x-auto rounded-lg border">
-        <table className="min-w-full text-sm">
+        <table className="min-w-full table-auto text-sm">
           <thead className="bg-neutral-50 text-xs">
-            <tr>
-              <th className="px-3 py-2 text-left">Sel.</th>
+            <tr className="text-neutral-700">
+              <th className="px-3 py-2 text-left w-10">Sel.</th>
               <th className="px-3 py-2 text-left">Item</th>
-              <th className="px-3 py-2 text-right">Qtd</th>
-              <th className="px-3 py-2 text-right">Unit.</th>
-              <th className="px-3 py-2 text-right">Subtotal</th>
-              <th className="px-3 py-2 text-right">% Ajuste</th>
-              <th className="px-3 py-2 text-right">Valor Fixo</th>
-              <th className="px-3 py-2">Similares</th>
-              <th className="px-3 py-2">Obs.</th>
-              <th className="px-3 py-2 text-right">Ajustado</th>
-              <th className="px-3 py-2 text-right">Δ</th>
+              <th className="px-3 py-2 text-right w-16">Qtd</th>
+              <th className="px-3 py-2 text-right w-24">Unit.</th>
+              <th className="px-3 py-2 text-right w-28">Subtotal</th>
+              <th className="px-3 py-2 text-right w-20">% Ajuste</th>
+              <th className="px-3 py-2 text-right w-28">Valor Fixo</th>
+              <th className="px-3 py-2 w-40">Similares</th>
+              <th className="px-3 py-2 w-56">Obs.</th>
+              <th className="px-3 py-2 text-right w-28">Ajustado</th>
+              <th className="px-3 py-2 text-right w-24">Δ</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="[&>tr]:align-middle">
             {rows.map((r) => (
-              <tr key={r.id} className="border-t align-middle">
+              <tr key={r.id} className="border-t">
                 <td className="px-3 py-2">
                   <input
                     type="checkbox"
@@ -252,17 +277,19 @@ export default function FinanceiroTabela(props: {
                   </div>
                 </td>
 
-                <td className="px-3 py-2 text-right">{r.quantidade}</td>
-                <td className="px-3 py-2 text-right">
+                <td className="px-3 py-2 text-right whitespace-nowrap">{r.quantidade}</td>
+
+                <td className="px-3 py-2 text-right whitespace-nowrap">
                   {r.precoUnitario.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                 </td>
-                <td className="px-3 py-2 text-right">
+
+                <td className="px-3 py-2 text-right whitespace-nowrap">
                   {r.subtotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                 </td>
 
                 <td className="px-3 py-2 text-right">
                   <input
-                    className="w-16 border rounded-md px-2 py-1 text-right"
+                    className="h-8 w-16 border rounded-md px-2 text-right text-sm"
                     inputMode="decimal"
                     placeholder="%"
                     value={r.percentual ?? ''}
@@ -273,7 +300,7 @@ export default function FinanceiroTabela(props: {
 
                 <td className="px-3 py-2 text-right">
                   <input
-                    className="w-24 border rounded-md px-2 py-1 text-right"
+                    className="h-8 w-28 border rounded-md px-2 text-right text-sm"
                     inputMode="decimal"
                     placeholder="0,00"
                     value={r.valorFixo ?? ''}
@@ -289,30 +316,35 @@ export default function FinanceiroTabela(props: {
                       checked={r.aplicarEmSimilares}
                       onChange={(e) => update(r.id, 'aplicarEmSimilares', e.currentTarget.checked)}
                     />
-                    aplicar em similares
+                    similares
                   </label>
                   {r.grupoSimilar ? (
-                    <div className="text-[11px] text-neutral-500 mt-1">grupo: {r.grupoSimilar}</div>
+                    <div className="inline-block ml-2 align-middle">
+                      <span className="text-[11px] rounded-full bg-neutral-100 px-2 py-0.5 text-neutral-600">
+                        grupo: {r.grupoSimilar}
+                      </span>
+                    </div>
                   ) : null}
                 </td>
 
                 <td className="px-3 py-2">
                   <input
-                    className="w-48 border rounded-md px-2 py-1"
+                    className="h-8 w-56 border rounded-md px-2 text-sm"
                     placeholder="Observação"
                     value={r.observacao ?? ''}
                     onChange={(e) => update(r.id, 'observacao', e.currentTarget.value)}
                   />
                 </td>
 
-                <td className="px-3 py-2 text-right">
+                <td className="px-3 py-2 text-right whitespace-nowrap">
                   {(ajustadoPorId[r.id] ?? r.subtotal).toLocaleString('pt-BR', {
                     style: 'currency',
                     currency: 'BRL',
                   })}
                 </td>
+
                 <td
-                  className={`px-3 py-2 text-right ${
+                  className={`px-3 py-2 text-right whitespace-nowrap ${
                     (deltasPorId[r.id] ?? 0) >= 0 ? 'text-emerald-700' : 'text-red-700'
                   }`}
                 >
