@@ -52,14 +52,17 @@ export default function FinanceiroTabela(props: {
         const pct =
           r.percentual == null || r.percentual === '' ? null : Number(r.percentual);
         if (pct == null || !Number.isFinite(pct)) return acc + toNum(r.subtotal, 0);
-        const novo = toNum(r.subtotal, 0) * (1 + pct / 100);
-        return acc + novo;
+        return acc + toNum(r.subtotal, 0) * (1 + pct / 100);
       }, 0);
       const p = Number(String(honorariosPreview).replace(',', '.'));
-      const temHonor = Number.isFinite(p);
-      const comHonor = temHonor ? ajustado * (1 + p / 100) : ajustado;
-      const lucro = toNum(props.recebemos, 0) - comHonor;
-      return { totalBase: base, totalAjustado: ajustado, deltaTotal: ajustado - base, totalComHonorarios: comHonor, lucroPrevisto: lucro };
+      const comHonor = Number.isFinite(p) ? ajustado * (1 + p / 100) : ajustado;
+      return {
+        totalBase: base,
+        totalAjustado: ajustado,
+        deltaTotal: ajustado - base,
+        totalComHonorarios: comHonor,
+        lucroPrevisto: toNum(props.recebemos, 0) - comHonor,
+      };
     }, [rows, honorariosPreview, props.recebemos]);
 
   function update<K extends keyof (typeof rows)[number]>(id: number, key: K, val: any) {
@@ -100,7 +103,6 @@ export default function FinanceiroTabela(props: {
 
   return (
     <div className="space-y-5 fin-block">
-      {/* toolbar */}
       <div className="fin-toolbar flex flex-wrap items-center gap-3">
         <button type="button" onClick={() => toggleAll(true)} className="px-2.5 py-1.5 rounded-md border bg-white text-sm">
           Selecionar todos
@@ -108,7 +110,6 @@ export default function FinanceiroTabela(props: {
         <button type="button" onClick={() => toggleAll(false)} className="px-2.5 py-1.5 rounded-md border bg-white text-sm">
           Limpar seleção
         </button>
-
         <div className="flex items-center gap-2 ml-4">
           <span className="text-xs text-neutral-600">Honorários (%)</span>
           <input
@@ -121,7 +122,6 @@ export default function FinanceiroTabela(props: {
         </div>
       </div>
 
-      {/* tabela */}
       <div className="overflow-x-auto rounded-lg border mt-2">
         <table className="min-w-full text-[13px] fin-table">
           <colgroup>
@@ -138,15 +138,15 @@ export default function FinanceiroTabela(props: {
 
           <thead className="bg-neutral-50 text-xs">
             <tr>
-              <th className="px-3 py-2 text-left has-sep">Sel.</th>
-              <th className="px-3 py-2 text-left has-sep">Item</th>
-              <th className="px-3 py-2 text-right has-sep">Qtd</th>
-              <th className="px-3 py-2 text-right has-sep">Unit.</th>
-              <th className="px-3 py-2 text-right has-sep">Subtotal</th>
-              <th className="px-3 py-2 text-right has-sep">% Ajuste</th>
-              <th className="px-3 py-2 text-left has-sep">Obs.</th>
-              <th className="px-3 py-2 text-right has-sep">Ajustado</th>
-              <th className="px-3 py-2 text-right">Δ</th>
+              <th className="px-3 py-2 text-left has-sep nowrap">Sel.</th>
+              <th className="px-3 py-2 text-left has-sep nowrap">Item</th>
+              <th className="px-3 py-2 text-right has-sep nowrap">Qtd</th>
+              <th className="px-3 py-2 text-right has-sep nowrap">Unit.</th>
+              <th className="px-3 py-2 text-right has-sep nowrap">Subtotal</th>
+              <th className="px-3 py-2 text-right has-sep nowrap">% Ajuste</th>
+              <th className="px-3 py-2 text-left has-sep nowrap">Obs.</th>
+              <th className="px-3 py-2 text-right has-sep nowrap">Ajustado</th>
+              <th className="px-3 py-2 text-right nowrap">Δ</th>
             </tr>
           </thead>
 
@@ -167,10 +167,13 @@ export default function FinanceiroTabela(props: {
                     />
                   </td>
 
+                  {/* ITEM — agora 1 linha, com ellipsis */}
                   <td className="px-3 py-2 cell has-sep">
-                    <div className="font-medium truncate">{r.nome}</div>
-                    <div className="text-[11px] text-neutral-500">
-                      {r.tipo} {r.unidade ? `• ${r.unidade}` : ''}
+                    <div className="one-line">
+                      <span className="name">{r.nome}</span>
+                      <span className="muted">
+                        {' '}• {r.tipo}{r.unidade ? ` • ${r.unidade}` : ''}
+                      </span>
                     </div>
                   </td>
 
@@ -208,15 +211,11 @@ export default function FinanceiroTabela(props: {
         </table>
       </div>
 
-      {/* espaço extra entre a tabela e os totais */}
       <div style={{ height: 10 }} />
 
-      {/* totais */}
       <div className="fin-totais grid gap-2 text-sm">
         <div>Fornecedores (base): {fmtBR(totalBase)}</div>
-        <div>
-          Fornecedores (ajustado): {fmtBR(totalAjustado)} <span className="ml-1">Δ {fmtBR(deltaTotal)}</span>
-        </div>
+        <div>Fornecedores (ajustado): {fmtBR(totalAjustado)} <span className="ml-1">Δ {fmtBR(deltaTotal)}</span></div>
         <div>
           Com honorários (prévia):{' '}
           {Number.isFinite(Number(String(honorariosPreview).replace(',', '.')))
@@ -235,15 +234,8 @@ export default function FinanceiroTabela(props: {
         </div>
       </div>
 
-      {/* CSS FORÇADO */}
       <style jsx>{`
-        .fin-table {
-          table-layout: fixed !important;
-          border-collapse: separate !important;
-          border-spacing: 0 !important;
-          width: 100% !important;
-        }
-        /* larguras das colunas (forçadas) */
+        .fin-table { table-layout: fixed !important; border-collapse: separate !important; border-spacing: 0 !important; width: 100% !important; }
         .fin-table col.col-sel { width: 52px !important; }
         .fin-table col.col-item { width: 340px !important; }
         .fin-table col.col-qtd { width: 66px !important; }
@@ -254,26 +246,22 @@ export default function FinanceiroTabela(props: {
         .fin-table col.col-ajustado { width: 120px !important; }
         .fin-table col.col-delta { width: 90px !important; }
 
-        /* linhas e separadores */
-        .fin-table thead th { border-top: 0 !important; }
         .cell { border-top: 1px solid #e5e7eb !important; }
         .has-sep { border-right: 1px solid rgba(0,0,0,.08) !important; }
+        .nowrap { white-space: nowrap !important; }
 
         /* inputs */
-        .fin-input-pct {
-          width: 42px !important;
-          min-width: 42px !important;
-          height: 24px !important;
-          padding: 0 4px !important;
-        }
-        .fin-input-obs {
-          width: 100% !important;
-          min-width: 0 !important;
-        }
+        .fin-input-pct { width: 42px !important; min-width: 42px !important; height: 24px !important; padding: 0 4px !important; }
+        .fin-input-obs { width: 100% !important; min-width: 0 !important; }
 
-        /* respiros */
-        .fin-toolbar { margin-bottom: 10px !important; }
-        .fin-totais { margin-top: 4px !important; }
+        /* ITEM em 1 linha */
+        .one-line {
+          white-space: nowrap !important;
+          overflow: hidden !important;
+          text-overflow: ellipsis !important;
+        }
+        .one-line .name { font-weight: 600; }
+        .one-line .muted { color: #6b7280; font-size: 11px; }
       `}</style>
     </div>
   );
