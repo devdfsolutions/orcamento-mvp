@@ -16,32 +16,35 @@ function toNum(v: any, fallback = 0): number {
 }
 
 async function getBaseFinanceiro(projetoId: number) {
-  try {
-    // 1) Buscamos só os IDs das estimativas do projeto (ordenadas)
-    const estimativasBase = await prisma.estimativa.findMany({
-      where: { projetoId },
-      orderBy: [{ aprovada: 'desc' }, { criadaEm: 'desc' }],
-      select: { id: true, aprovada: true },
-    });
+  // 1) Busca somente IDs das estimativas (aprovadas 1º; depois mais recentes)
+  const estimativas = await prisma.estimativa.findMany({
+    where: { projetoId },
+    orderBy: [{ aprovada: 'desc' }, { criadaEm: 'desc' }],
+    select: { id: true, aprovada: true },
+  });
 
-    const escolhida = estimativasBase[0] || null;
-    const estimativaId = escolhida?.id ?? null;
-    const veioAprovada = !!escolhida?.aprovada;
+  const escolhida = estimativas[0] || null;
+  const estimativaId = escolhida?.id ?? null;
+  const veioAprovada = !!escolhida?.aprovada;
 
-    // 2) Se existir alguma estimativa, buscamos os itens dela
-    let itens: Array<{
-      id: number;
-      quantidade: any;
-      valorUnitMat: any;
-      valorUnitMo: any;
-      totalItem: any;
-      produto?: { nome: string | null; tipo: 'PRODUTO' | 'SERVICO' | 'AMBOS' | null } | null;
-      unidade?: { sigla: string | null } | null;
-    }> = [];
+  // 2) Busca itens dessa estimativa (se houver) — nunca derruba a flag se der erro
+  let itens:
+    | Array<{
+        id: number;
+        quantidade: any;
+        valorUnitMat: any;
+        valorUnitMo: any;
+        totalItem: any;
+        produto?: { nome: string | null; tipo: 'PRODUTO' | 'SERVICO' | 'AMBOS' | null } | null;
+        unidade?: { sigla: string | null } | null;
+      }>
+    | [] = [];
 
-    if (estimativaId) {
+  if (estimativaId) {
+    try {
       itens = await prisma.estimativaItem.findMany({
         where: { estimativaId },
+        orderBy: { id: 'asc' },
         select: {
           id: true,
           quantidade: true,
@@ -51,27 +54,40 @@ async function getBaseFinanceiro(projetoId: number) {
           produto: { select: { nome: true, tipo: true } },
           unidade: { select: { sigla: true } },
         },
-        orderBy: { id: 'asc' },
       });
+    } catch (e) {
+      console.error('[financeiro] erro buscando itens da estimativa', {
+        projetoId,
+        estimativaId,
+        e,
+      });
+      itens = [];
     }
+  }
 
-    // 3) Totais e resumo
-    const aPagar = itens.reduce((acc, it) => acc + toNum(it.totalItem, 0), 0);
+  // 3) Resumo financeiro (legado) — também não derruba nada se falhar
+  let recebemosNum = 0;
+  let observacoes = '';
+  try {
+    const resumo = await prisma.resumoProjeto.findUnique({ where: { projetoId } });
+    recebemosNum = toNum(resumo?.recebemos, 0);
+    observacoes = resumo?.observacoes || '';
+  } catch (e) {
+    console.error('[financeiro] erro buscando resumo', { projetoId, e });
+  }
 
-    const resumo = await prisma.resumoProjeto.findUnique({
-      where: { projetoId },
-    });
+  // 4) Ajustes (para pré-preencher)
+  const ajustePorItem = new Map<
+    number,
+    { percentual: number | null; valorFixo: number | null; observacao: string | null }
+  >();
+  let honorariosPercentual: number | null = null;
 
+  try {
     const ajustes = await prisma.financeiroAjuste.findMany({
       where: { projetoId },
       orderBy: { updatedAt: 'desc' },
     });
-
-    const ajustePorItem = new Map<
-      number,
-      { percentual: number | null; valorFixo: number | null; observacao: string | null }
-    >();
-    let honorariosPercentual: number | null = null;
 
     for (const aj of ajustes) {
       if (aj.estimativaItemId) {
@@ -86,61 +102,51 @@ async function getBaseFinanceiro(projetoId: number) {
         honorariosPercentual = toNum(aj.percentual, null as any);
       }
     }
-
-    // 4) Normalização para a tabela
-    const itensTabela = itens.map((it) => {
-      const q = toNum(it.quantidade, 0);
-      const unitMat = toNum(it.valorUnitMat, 0);
-      const unitMo = toNum(it.valorUnitMo, 0);
-      const subtotal = toNum(it.totalItem, 0);
-
-      const precoUnitarioBase = unitMat + unitMo;
-      const precoUnitario =
-        precoUnitarioBase > 0 ? precoUnitarioBase : q > 0 ? subtotal / q : 0;
-
-      const ajuste = it.id ? ajustePorItem.get(it.id) : undefined;
-
-      return {
-        id: it.id,
-        tipo: (it.produto?.tipo as 'PRODUTO' | 'SERVICO' | 'AMBOS') === 'PRODUTO'
-          ? 'PRODUTO'
-          : 'SERVICO',
-        nome: it.produto?.nome || `Item #${it.id}`,
-        quantidade: q,
-        unidade: it.unidade?.sigla ?? null,
-        precoUnitario,
-        subtotal,
-        ajuste: ajuste || null,
-        grupoSimilar: it.produto?.nome || null,
-      };
-    });
-
-    return {
-      temEstimativaParaExibir: !!estimativaId, // true se achou aprovada ou a mais recente
-      veioAprovada,
-      aPagar,
-      recebemos: toNum(resumo?.recebemos, 0),
-      observacoes: resumo?.observacoes || '',
-      itensTabela,
-      honorariosPercentual,
-    };
   } catch (e) {
-    console.error('[financeiro:getBaseFinanceiro] erro', e);
-    return {
-      temEstimativaParaExibir: false,
-      veioAprovada: false,
-      aPagar: 0,
-      recebemos: 0,
-      observacoes: '',
-      itensTabela: [] as any[],
-      honorariosPercentual: null as number | null,
-    };
+    console.error('[financeiro] erro buscando ajustes', { projetoId, e });
   }
+
+  // 5) Normalização para a tabela
+  const itensTabela = (itens || []).map((it) => {
+    const q = toNum(it.quantidade, 0);
+    const unitMat = toNum(it.valorUnitMat, 0);
+    const unitMo = toNum(it.valorUnitMo, 0);
+    const subtotal = toNum(it.totalItem, 0);
+
+    const precoUnitarioBase = unitMat + unitMo;
+    const precoUnitario = precoUnitarioBase > 0 ? precoUnitarioBase : q > 0 ? subtotal / q : 0;
+
+    const ajuste = it.id ? ajustePorItem.get(it.id) : undefined;
+
+    return {
+      id: it.id,
+      tipo: (it.produto?.tipo as 'PRODUTO' | 'SERVICO' | 'AMBOS') === 'PRODUTO' ? 'PRODUTO' : 'SERVICO',
+      nome: it.produto?.nome || `Item #${it.id}`,
+      quantidade: q,
+      unidade: it.unidade?.sigla ?? null,
+      precoUnitario,
+      subtotal,
+      ajuste: ajuste || null,
+      grupoSimilar: it.produto?.nome || null,
+    };
+  });
+
+  const aPagar = itensTabela.reduce((acc, it) => acc + toNum(it.subtotal, 0), 0);
+
+  return {
+    temEstimativaParaExibir: !!estimativaId, // se tem id, a tabela deve aparecer
+    veioAprovada,
+    aPagar,
+    recebemos: recebemosNum,
+    observacoes,
+    itensTabela,
+    honorariosPercentual,
+  };
 }
 
 export default async function Page({ params }: Props) {
   const projetoId = Number(params.id);
-  const usuarioId = 0; // quando tiver auth, preencha com o usuário logado
+  const usuarioId = 0; // quando tiver auth, preencher com o usuário logado
 
   const {
     temEstimativaParaExibir,
@@ -232,7 +238,7 @@ export default async function Page({ params }: Props) {
             style={{
               width: '100%',
               padding: '10px 12px',
-              border: '1px solid #ddd',
+              border: '1px solid #ddd', // <- corrigido
               borderRadius: 8,
             }}
             placeholder="Anotações livres..."
