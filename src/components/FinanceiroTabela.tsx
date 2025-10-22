@@ -147,13 +147,13 @@ export default function FinanceiroTabela(props: {
           {/* controla larguras e evita invadir vizinho */}
           <colgroup>
             <col style={{ width: 25 }} />
-            <col style={{ width: 200 }} />
+            <col style={{ width: 250 }} />
             <col style={{ width: 100 }} />
             <col style={{ width: 72 }} />
             <col style={{ width: 96 }} />
-            <col style={{ width: 64 }} />
-            <col style={{ width: 190 }} />
+            <col style={{ width: 50 }} />
             <col style={{ width: 200 }} />
+            <col style={{ width: 100 }} />
             <col style={{ width: 120 }} />
             <col style={{ width: 90 }} />
           </colgroup>
