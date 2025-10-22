@@ -18,63 +18,46 @@ function toNum(v: any, fallback = 0): number {
 
 async function getBaseFinanceiro(projetoId: number) {
   try {
-    // 1) Tenta buscar a estimativa APROVADA
-    let estimativa =
-      await prisma.estimativa.findFirst({
-        where: { projetoId, aprovada: true },
-        include: {
-          itens: {
-            select: {
-              id: true,
-              quantidade: true,      // Decimal(12,3)
-              valorUnitMat: true,    // Decimal?
-              valorUnitMo: true,     // Decimal?
-              totalItem: true,       // Decimal?
-              produto: {             // relação real
-                select: { nome: true, tipo: true },
-              },
-              unidade: {
-                select: { sigla: true },
+    // 1) Carrega o PROJETO com TODAS as estimativas ordenadas:
+    //    - primeiro as APROVADAS
+    //    - depois por data de criação (mais recente primeiro)
+    const projeto = await prisma.projeto.findUnique({
+      where: { id: projetoId },
+      include: {
+        estimativas: {
+          orderBy: [{ aprovada: 'desc' }, { criadaEm: 'desc' }],
+          include: {
+            itens: {
+              select: {
+                id: true,
+                quantidade: true,
+                valorUnitMat: true,
+                valorUnitMo: true,
+                totalItem: true,
+                produto: { select: { nome: true, tipo: true } },
+                unidade: { select: { sigla: true } },
               },
             },
           },
         },
-      });
+      },
+    });
 
-    let veioAprovada = !!estimativa;
-
-    // 2) Se não houver aprovada, CAI PARA A MAIS RECENTE do projeto
-    if (!estimativa) {
-      estimativa = await prisma.estimativa.findFirst({
-        where: { projetoId },
-        orderBy: { criadaEm: 'desc' },
-        include: {
-          itens: {
-            select: {
-              id: true,
-              quantidade: true,
-              valorUnitMat: true,
-              valorUnitMo: true,
-              totalItem: true,
-              produto: { select: { nome: true, tipo: true } },
-              unidade: { select: { sigla: true } },
-            },
-          },
-        },
-      });
-    }
+    const estimativas = projeto?.estimativas ?? [];
+    const estimativa = estimativas[0] || null; // aprovada primeiro, senão a mais recente
+    const veioAprovada = !!estimativa?.aprovada;
 
     const itens = estimativa?.itens ?? [];
 
-    // 3) Total a pagar (fornecedores) a partir do totalItem
+    // 2) Total a pagar (fornecedores) a partir do totalItem
     const aPagar = itens.reduce((acc, it) => acc + toNum(it.totalItem, 0), 0);
 
-    // 4) Resumo financeiro (legado)
+    // 3) Resumo financeiro (legado)
     const resumo = await prisma.resumoProjeto.findUnique({
       where: { projetoId },
     });
 
-    // 5) Ajustes existentes (para pré-preencher)
+    // 4) Ajustes existentes (para pré-preencher)
     const ajustes = await prisma.financeiroAjuste.findMany({
       where: { projetoId },
       orderBy: { updatedAt: 'desc' },
@@ -100,21 +83,16 @@ async function getBaseFinanceiro(projetoId: number) {
       }
     }
 
-    // 6) Normalização para a tabela
+    // 5) Normalização para a tabela
     const itensTabela = itens.map((it) => {
       const q = toNum(it.quantidade, 0);
       const unitMat = toNum(it.valorUnitMat, 0);
       const unitMo = toNum(it.valorUnitMo, 0);
       const subtotal = toNum(it.totalItem, 0);
 
-      // Preferimos valor unitário informado (mat + mo). Se não houver, derivamos por regra de três.
       const precoUnitarioBase = unitMat + unitMo;
       const precoUnitario =
-        precoUnitarioBase > 0
-          ? precoUnitarioBase
-          : q > 0
-          ? subtotal / q
-          : 0;
+        precoUnitarioBase > 0 ? precoUnitarioBase : q > 0 ? subtotal / q : 0;
 
       const ajuste = it.id ? ajustePorItem.get(it.id) : undefined;
 
@@ -123,21 +101,19 @@ async function getBaseFinanceiro(projetoId: number) {
         tipo:
           (it.produto?.tipo as 'PRODUTO' | 'SERVICO' | 'AMBOS') === 'PRODUTO'
             ? 'PRODUTO'
-            : 'SERVICO', // para exibição; seu enum tem AMBOS também
+            : 'SERVICO',
         nome: it.produto?.nome || `Item #${it.id}`,
         quantidade: q,
         unidade: it.unidade?.sigla ?? null,
         precoUnitario,
         subtotal,
         ajuste: ajuste || null,
-        // Para "aplicar em similares", agrupamos por nome real do produto
         grupoSimilar: it.produto?.nome || null,
       };
     });
 
     return {
-      // se não tem aprovada mas tem estimativa recente, ainda queremos renderizar a tabela
-      temEstimativaParaExibir: !!estimativa,
+      temEstimativaParaExibir: !!estimativa, // true se achou aprovada ou recente
       veioAprovada,
       aPagar,
       recebemos: toNum(resumo?.recebemos, 0),
@@ -187,7 +163,7 @@ export default async function Page({ params }: Props) {
         </p>
       ) : null}
 
-      {/* RESUMO (mantido) */}
+      {/* RESUMO */}
       <form action={salvarResumoFinanceiro} style={{ marginTop: 8 }}>
         <input type="hidden" name="projetoId" value={projetoId} />
 
@@ -273,7 +249,7 @@ export default async function Page({ params }: Props) {
         </div>
       </form>
 
-      {/* TABELA DE ITENS (ajustes) */}
+      {/* TABELA DE ITENS */}
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Ajustes por item</h2>
         {temEstimativaParaExibir ? (
