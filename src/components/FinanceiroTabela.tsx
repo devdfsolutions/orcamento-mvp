@@ -3,7 +3,7 @@
 
 import { useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { upsertAjustesFinanceiros, aplicarHonorariosDirect } from '@/actions/financeiro';
+import { upsertAjustesFinanceiros } from '@/actions/financeiro';
 
 type Item = {
   id: number;
@@ -13,7 +13,7 @@ type Item = {
   unidade?: string | null;
   precoUnitario: number;
   subtotal: number;
-  ajuste?: { percentual?: number | null; valorFixo?: number | null; observacao?: string | null } | null;
+  ajuste?: { percentual?: number | null; observacao?: string | null } | null;
   grupoSimilar?: string | null;
 };
 
@@ -37,14 +37,13 @@ export default function FinanceiroTabela(props: {
       ...it,
       checked: false,
       percentual: it.ajuste?.percentual ?? null,
-      valorFixo: it.ajuste?.valorFixo ?? null,
       observacao: it.ajuste?.observacao ?? '',
       aplicarEmSimilares: false,
     }))
   );
 
+  // prévia de honorários (não grava até clicar em Salvar ajustes)
   const [honorariosPreview, setHonorariosPreview] = useState<number | null>(null);
-  const [honorariosToSave, setHonorariosToSave] = useState<string>('');
 
   function update<K extends keyof (typeof rows)[number]>(id: number, key: K, val: any) {
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, [key]: val } : r)));
@@ -70,8 +69,6 @@ export default function FinanceiroTabela(props: {
 
     const calcItem = (r: (typeof rows)[number]) => {
       const pct = parseDec(r.percentual as any);
-      const fix = parseDec(r.valorFixo as any);
-      if (fix != null) return Math.max(0, fix);
       if (pct != null) return Math.max(0, r.subtotal * (1 + pct / 100));
       return r.subtotal;
     };
@@ -87,9 +84,7 @@ export default function FinanceiroTabela(props: {
         if (sibId === r.id) return;
         const sib = rows.find((x) => x.id === sibId)!;
         const pct = parseDec(r.percentual as any);
-        const fix = parseDec(r.valorFixo as any);
-        if (fix != null) adjusted[sibId] = Math.max(0, fix);
-        else if (pct != null) adjusted[sibId] = Math.max(0, sib.subtotal * (1 + pct / 100));
+        if (pct != null) adjusted[sibId] = Math.max(0, sib.subtotal * (1 + pct / 100));
       });
     });
 
@@ -107,21 +102,23 @@ export default function FinanceiroTabela(props: {
 
   const lucroPrevisto = (props.recebemos ?? 0) - totalComHonorarios;
 
-  /* ======== ACTIONS ======== */
-  async function salvarAjustesSelecionados() {
+  /* ======== ACTION: SALVAR (itens + honorários) ======== */
+  async function salvarTudo() {
     const payload = rows
       .filter((r) => r.checked)
       .map((r) => ({
         estimativaItemId: r.id,
         percentual: parseDec(r.percentual as any),
-        valorFixo: parseDec(r.valorFixo as any),
         observacao: r.observacao?.trim() || null,
         aplicarEmSimilares: !!r.aplicarEmSimilares,
         grupoSimilar: r.grupoSimilar ?? null,
       }));
 
-    if (payload.length === 0) {
-      alert('Marque ao menos um item para salvar.');
+    // Pode salvar só honorários, mesmo sem itens marcados
+    const honorariosPercentual = honorariosPreview;
+
+    if (payload.length === 0 && honorariosPercentual == null) {
+      alert('Marque itens ou informe honorários para salvar.');
       return;
     }
 
@@ -130,33 +127,13 @@ export default function FinanceiroTabela(props: {
         projetoId: props.projetoId,
         usuarioId: props.usuarioId,
         itens: payload,
+        honorariosPercentual,
       });
       if ((res as any)?.ok) {
         router.refresh();
         alert('Ajustes salvos!');
       } else {
-        alert('Falha ao salvar.');
-      }
-    });
-  }
-
-  async function aplicarHonorarios() {
-    const pct = parseDec(honorariosToSave);
-    if (pct == null) {
-      alert('Informe um percentual válido.');
-      return;
-    }
-    startTransition(async () => {
-      const res = await aplicarHonorariosDirect({
-        projetoId: props.projetoId,
-        usuarioId: props.usuarioId,
-        percentual: pct,
-      });
-      if ((res as any)?.ok) {
-        router.refresh();
-        alert('Honorários aplicados!');
-      } else {
-        alert((res as any)?.message || 'Falha ao aplicar honorários.');
+        alert((res as any)?.message || 'Falha ao salvar.');
       }
     });
   }
@@ -187,55 +164,17 @@ export default function FinanceiroTabela(props: {
 
           <div className="hidden md:block w-px h-6 bg-neutral-200" />
 
-          {/* Prévia + aplicar honorários */}
+          {/* Prévia de honorários (único campo) */}
           <div className="flex items-center gap-2">
-            <label className="text-sm text-neutral-700">
-              Prévia honorários (%)
-            </label>
+            <label className="text-sm text-neutral-700">Honorários (%)</label>
             <input
               className="h-8 w-20 border rounded-md px-2 text-right text-sm"
               inputMode="decimal"
               placeholder="ex.: 10"
               value={honorariosPreview ?? ''}
-              onChange={(e) => {
-                const v = parseDec(e.currentTarget.value);
-                setHonorariosPreview(v);
-              }}
-              title="Só pré-visualização (não grava)."
+              onChange={(e) => setHonorariosPreview(parseDec(e.currentTarget.value))}
+              title="Prévia dos honorários; será gravado junto com os ajustes."
             />
-            <span className="text-neutral-300">|</span>
-            <input
-              className="h-8 w-20 border rounded-md px-2 text-right text-sm"
-              inputMode="decimal"
-              placeholder="ex.: 10"
-              value={honorariosToSave}
-              onChange={(e) => setHonorariosToSave(e.currentTarget.value)}
-              title="Percentual a gravar como honorários."
-            />
-            <button
-              onClick={aplicarHonorarios}
-              disabled={isPending}
-              className="h-8 px-3 rounded-md border border-neutral-900 bg-white text-neutral-900 text-sm font-semibold disabled:opacity-60"
-              title="Grava um ajuste de honorários para o projeto"
-              type="button"
-            >
-              {isPending ? 'Gravando…' : 'Aplicar honorários'}
-            </button>
-          </div>
-
-          <div className="hidden md:block w-px h-6 bg-neutral-200" />
-
-          {/* Salvar ajustes */}
-          <div className="ml-auto">
-            <button
-              onClick={salvarAjustesSelecionados}
-              disabled={isPending}
-              className="h-8 px-4 rounded-md border border-neutral-900 bg-neutral-900 text-white text-sm font-semibold disabled:opacity-60"
-              title="Cria registros em FinanceiroAjuste sem alterar a estimativa original"
-              type="button"
-            >
-              {isPending ? 'Salvando…' : 'Salvar ajustes'}
-            </button>
           </div>
         </div>
       </div>
@@ -251,7 +190,6 @@ export default function FinanceiroTabela(props: {
               <th className="px-3 py-2 text-right w-24">Unit.</th>
               <th className="px-3 py-2 text-right w-28">Subtotal</th>
               <th className="px-3 py-2 text-right w-20">% Ajuste</th>
-              <th className="px-3 py-2 text-right w-28">Valor Fixo</th>
               <th className="px-3 py-2 w-40">Similares</th>
               <th className="px-3 py-2 w-56">Obs.</th>
               <th className="px-3 py-2 text-right w-28">Ajustado</th>
@@ -295,17 +233,6 @@ export default function FinanceiroTabela(props: {
                     value={r.percentual ?? ''}
                     onChange={(e) => update(r.id, 'percentual', e.currentTarget.value)}
                     title="Use valores positivos/negativos (ex.: 10 ou -5)"
-                  />
-                </td>
-
-                <td className="px-3 py-2 text-right">
-                  <input
-                    className="h-8 w-28 border rounded-md px-2 text-right text-sm"
-                    inputMode="decimal"
-                    placeholder="0,00"
-                    value={r.valorFixo ?? ''}
-                    onChange={(e) => update(r.id, 'valorFixo', e.currentTarget.value)}
-                    title="Valor final para o item; ignora a % se preenchido"
                   />
                 </td>
 
@@ -359,7 +286,7 @@ export default function FinanceiroTabela(props: {
         </table>
       </div>
 
-      {/* Resumo ao vivo */}
+      {/* Resumo ao vivo + botão salvar no rodapé */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <div className="rounded-lg border p-3">
           <div className="text-xs text-neutral-600">Fornecedores (base)</div>
@@ -398,6 +325,18 @@ export default function FinanceiroTabela(props: {
             )}
           </div>
         </div>
+      </div>
+
+      <div className="flex justify-end">
+        <button
+          onClick={salvarTudo}
+          disabled={isPending}
+          className="mt-2 h-9 px-5 rounded-md border border-neutral-900 bg-neutral-900 text-white text-sm font-semibold disabled:opacity-60"
+          title="Salva ajustes dos itens (selecionados) e os honorários (%)."
+          type="button"
+        >
+          {isPending ? 'Salvando…' : 'Salvar ajustes'}
+        </button>
       </div>
     </div>
   );
