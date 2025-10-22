@@ -143,7 +143,7 @@ export default function FinanceiroTabela(props: {
           />
         </label>
       </div>
-      <br>
+    
 
       {/* Respiro entre toolbar e a tabela */}
       <div className="h-2" />
@@ -245,7 +245,7 @@ export default function FinanceiroTabela(props: {
           </tbody>
         </table>
       </div>
-<br>
+
       {/* Respiro entre tabela e totais */}
       <div className="h-4" />
 
