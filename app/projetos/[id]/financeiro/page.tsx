@@ -232,7 +232,7 @@ export default async function Page({ params }: Props) {
             style={{
               width: '100%',
               padding: '10px 12px',
-              border: '1px solid '#ddd',
+              border: '1px solid #ddd',
               borderRadius: 8,
             }}
             placeholder="Anotações livres..."
