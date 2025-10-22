@@ -83,9 +83,9 @@ export default function FinanceiroTabela(props: {
         estimativaItemId: r.id,
         percentual:
           r.percentual == null || r.percentual === '' ? null : Number(r.percentual),
-        valorFixo: null, // campo removido da UI
+        valorFixo: null,
         observacao: r.observacao?.trim() || null,
-        aplicarEmSimilares: false, // campo removido
+        aplicarEmSimilares: false,
         grupoSimilar: null,
       }));
 
@@ -109,7 +109,7 @@ export default function FinanceiroTabela(props: {
 
   return (
     <div className="space-y-4">
-      {/* toolbar */}
+      {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-3">
         <button
           type="button"
@@ -139,47 +139,45 @@ export default function FinanceiroTabela(props: {
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border mt-3">
-        <table className="min-w-full text-[13px]">
+      {/* Tabela */}
+      <div className="overflow-x-auto rounded-lg border mt-4">
+        <table className="min-w-full text-[13px] border-collapse border-spacing-0">
           <colgroup>
-            <col style={{ width: 150 }} />
-            <col style={{ width: 320 }} />
-            <col style={{ width: 150 }} />
-            <col style={{ width: 70 }} />
-            <col style={{ width: 110 }} />
-            <col style={{ width: 72 }} />   {/* % Ajuste */}
-            <col style={{ width: 210 }} />  {/* Obs. */}
-            <col style={{ width: 110 }} />  {/* Ajustado */}
-            <col style={{ width: 70 }} />   {/* Δ */}
+            <col style={{ width: '40px' }} />   {/* Sel */}
+            <col style={{ width: '280px' }} />  {/* Item */}
+            <col style={{ width: '60px' }} />   {/* Qtd */}
+            <col style={{ width: '90px' }} />   {/* Unit */}
+            <col style={{ width: '110px' }} />  {/* Subtotal */}
+            <col style={{ width: '70px' }} />   {/* % Ajuste */}
+            <col style={{ width: '220px' }} />  {/* Obs */}
+            <col style={{ width: '110px' }} />  {/* Ajustado */}
+            <col style={{ width: '70px' }} />   {/* Δ */}
           </colgroup>
 
-          <thead className="bg-neutral-50 text-xs">
+          <thead className="bg-neutral-50 text-xs text-neutral-700 border-b border-neutral-200">
             <tr>
-              <th className="px-3 py-2 text-left">Sel.</th>
-              <th className="px-3 py-2 text-left">Item</th>
-              <th className="px-3 py-2 text-right">Qtd</th>
-              <th className="px-3 py-2 text-right">Unit.</th>
-              <th className="px-3 py-2 text-right">Subtotal</th>
-              <th className="px-3 py-2 text-right">% Ajuste</th>
-              <th className="px-3 py-2 text-left">Obs.</th>
-              <th className="px-3 py-2 text-right">Ajustado</th>
-              <th className="px-3 py-2 text-right">Δ</th>
+              <th className="px-3 py-2 text-left border-x border-neutral-100">Sel.</th>
+              <th className="px-3 py-2 text-left border-x border-neutral-100">Item</th>
+              <th className="px-3 py-2 text-right border-x border-neutral-100">Qtd</th>
+              <th className="px-3 py-2 text-right border-x border-neutral-100">Unit.</th>
+              <th className="px-3 py-2 text-right border-x border-neutral-100">Subtotal</th>
+              <th className="px-3 py-2 text-right border-x border-neutral-100">% Ajuste</th>
+              <th className="px-3 py-2 text-left border-x border-neutral-100">Obs.</th>
+              <th className="px-3 py-2 text-right border-x border-neutral-100">Ajustado</th>
+              <th className="px-3 py-2 text-right border-x border-neutral-100">Δ</th>
             </tr>
           </thead>
 
           <tbody>
             {rows.map((r) => {
-              const pct =
-                r.percentual == null || r.percentual === ''
-                  ? null
-                  : Number(r.percentual);
+              const pct = r.percentual == null || r.percentual === '' ? null : Number(r.percentual);
               const base = toNum(r.subtotal, 0);
               const ajustado = pct == null || !Number.isFinite(pct) ? base : base * (1 + pct / 100);
               const delta = ajustado - base;
 
               return (
-                <tr key={r.id} className="border-t align-top">
-                  <td className="px-3 py-2">
+                <tr key={r.id} className="border-t border-neutral-200 align-top hover:bg-neutral-50">
+                  <td className="px-3 py-2 text-center border-x border-neutral-100">
                     <input
                       type="checkbox"
                       checked={r.checked}
@@ -187,38 +185,36 @@ export default function FinanceiroTabela(props: {
                     />
                   </td>
 
-                  <td className="px-3 py-2">
+                  <td className="px-3 py-2 border-x border-neutral-100">
                     <div className="font-medium">{r.nome}</div>
                     <div className="text-[11px] text-neutral-500">
                       {r.tipo} {r.unidade ? `• ${r.unidade}` : ''}
                     </div>
                   </td>
 
-                  <td className="px-3 py-2 text-right">{r.quantidade}</td>
-                  <td className="px-3 py-2 text-right">{fmtBR(r.precoUnitario)}</td>
-                  <td className="px-3 py-2 text-right">{fmtBR(base)}</td>
+                  <td className="px-3 py-2 text-right border-x border-neutral-100">{r.quantidade}</td>
+                  <td className="px-3 py-2 text-right border-x border-neutral-100">{fmtBR(r.precoUnitario)}</td>
+                  <td className="px-3 py-2 text-right border-x border-neutral-100">{fmtBR(base)}</td>
 
                   {/* % Ajuste */}
-                  <td className="px-3 py-2 text-right">
-                    <div className="flex justify-end">
-                      <input
-                        className="border rounded-md text-right text-xs leading-none"
-                        style={{
-                          width: '38px',
-                          minWidth: '38px',
-                          height: '24px',
-                          padding: '0 4px',
-                        }}
-                        inputMode="decimal"
-                        placeholder="%"
-                        value={r.percentual ?? ''}
-                        onChange={(e) => update(r.id, 'percentual', e.currentTarget.value)}
-                      />
-                    </div>
+                  <td className="px-3 py-2 text-right border-x border-neutral-100">
+                    <input
+                      className="border rounded-md text-right text-xs leading-none"
+                      style={{
+                        width: '38px',
+                        minWidth: '38px',
+                        height: '24px',
+                        padding: '0 4px',
+                      }}
+                      inputMode="decimal"
+                      placeholder="%"
+                      value={r.percentual ?? ''}
+                      onChange={(e) => update(r.id, 'percentual', e.currentTarget.value)}
+                    />
                   </td>
 
                   {/* Obs */}
-                  <td className="px-3 py-2">
+                  <td className="px-3 py-2 border-x border-neutral-100">
                     <input
                       className="border rounded-md px-2 py-1 text-sm w-full"
                       placeholder="Observação"
@@ -227,8 +223,8 @@ export default function FinanceiroTabela(props: {
                     />
                   </td>
 
-                  <td className="px-3 py-2 text-right">{fmtBR(ajustado)}</td>
-                  <td className="px-3 py-2 text-right">{fmtBR(delta)}</td>
+                  <td className="px-3 py-2 text-right border-x border-neutral-100">{fmtBR(ajustado)}</td>
+                  <td className="px-3 py-2 text-right border-x border-neutral-100">{fmtBR(delta)}</td>
                 </tr>
               );
             })}
@@ -236,11 +232,15 @@ export default function FinanceiroTabela(props: {
         </table>
       </div>
 
+      {/* Espaço extra abaixo da tabela */}
+      <div className="h-3" />
+
       {/* Totais + botão */}
-      <div className="grid gap-2 text-sm mt-2">
+      <div className="grid gap-2 text-sm mt-3 pt-1 border-t border-neutral-200">
         <div>Fornecedores (base): {fmtBR(totalBase)}</div>
         <div>
-          Fornecedores (ajustado): {fmtBR(totalAjustado)} <span className="ml-1">Δ {fmtBR(deltaTotal)}</span>
+          Fornecedores (ajustado): {fmtBR(totalAjustado)}{' '}
+          <span className="ml-1 text-neutral-500">Δ {fmtBR(deltaTotal)}</span>
         </div>
         <div>
           Com honorários (prévia):{' '}
@@ -248,9 +248,7 @@ export default function FinanceiroTabela(props: {
             ? fmtBR(totalComHonorarios)
             : fmtBR(totalAjustado)}
         </div>
-        <div className="font-semibold">
-          Lucro previsto: {fmtBR(lucroPrevisto)}
-        </div>
+        <div className="font-semibold">Lucro previsto: {fmtBR(lucroPrevisto)}</div>
 
         <div className="mt-2">
           <button
