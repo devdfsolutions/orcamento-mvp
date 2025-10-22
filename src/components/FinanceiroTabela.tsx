@@ -1,8 +1,7 @@
 // src/components/FinanceiroTabela.tsx
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
-import { useRouter } from 'next/navigation';
+import { useMemo, useState } from 'react';
 import { upsertAjustesFinanceiros } from '@/actions/financeiro';
 
 type Item = {
@@ -17,21 +16,12 @@ type Item = {
   grupoSimilar?: string | null;
 };
 
-function parseDec(v: string | number | null | undefined): number | null {
-  if (v == null || v === '') return null;
-  const n = Number(String(v).replace(',', '.'));
-  return Number.isFinite(n) ? n : null;
-}
-
 export default function FinanceiroTabela(props: {
   projetoId: number;
   usuarioId: number;
   itens: Item[];
-  recebemos?: number;
+  recebemos: number;
 }) {
-  const router = useRouter();
-  const [isPending, startTransition] = useTransition();
-
   const [rows, setRows] = useState(
     props.itens.map((it) => ({
       ...it,
@@ -42,8 +32,8 @@ export default function FinanceiroTabela(props: {
     }))
   );
 
-  // prévia de honorários (não grava até clicar em Salvar ajustes)
-  const [honorariosPreview, setHonorariosPreview] = useState<number | null>(null);
+  // Honorários único (na toolbar). Deixe vazio para não aplicar.
+  const [honorariosPercentual, setHonorariosPercentual] = useState<number | ''>('');
 
   function update<K extends keyof (typeof rows)[number]>(id: number, key: K, val: any) {
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, [key]: val } : r)));
@@ -51,291 +41,249 @@ export default function FinanceiroTabela(props: {
   function toggleAll(checked: boolean) {
     setRows((prev) => prev.map((r) => ({ ...r, checked })));
   }
+  function clearSelection() {
+    setRows((prev) =>
+      prev.map((r) => ({
+        ...r,
+        checked: false,
+      }))
+    );
+  }
 
-  /* ======== CÁLCULOS AO VIVO ======== */
+  // ---- PREVIEWS -------------------------------------------------------------
   const baseTotal = useMemo(
-    () => rows.reduce((acc, r) => acc + (r.subtotal || 0), 0),
+    () => rows.reduce((acc, r) => acc + (Number.isFinite(r.subtotal) ? r.subtotal : 0), 0),
     [rows]
   );
 
-  const { totalAjustado, deltasPorId, ajustadoPorId } = useMemo(() => {
-    const byName = new Map<string, number[]>();
-    rows.forEach((r) => {
-      if (!r.grupoSimilar) return;
-      const arr = byName.get(r.grupoSimilar) || [];
-      arr.push(r.id);
-      byName.set(r.grupoSimilar, arr);
+  const ajustadoPorItem = useMemo(() => {
+    return rows.map((r) => {
+      const p = r.percentual == null || r.percentual === '' ? 0 : Number(r.percentual) || 0;
+      const valor = r.subtotal * (1 + p / 100);
+      const delta = valor - r.subtotal;
+      return { id: r.id, valor, delta };
     });
-
-    const calcItem = (r: (typeof rows)[number]) => {
-      const pct = parseDec(r.percentual as any);
-      if (pct != null) return Math.max(0, r.subtotal * (1 + pct / 100));
-      return r.subtotal;
-    };
-
-    const adjusted: Record<number, number> = {};
-    rows.forEach((r) => (adjusted[r.id] = calcItem(r)));
-
-    // aplicar em similares
-    rows.forEach((r) => {
-      if (!r.aplicarEmSimilares || !r.grupoSimilar) return;
-      const siblings = byName.get(r.grupoSimilar) || [];
-      siblings.forEach((sibId) => {
-        if (sibId === r.id) return;
-        const sib = rows.find((x) => x.id === sibId)!;
-        const pct = parseDec(r.percentual as any);
-        if (pct != null) adjusted[sibId] = Math.max(0, sib.subtotal * (1 + pct / 100));
-      });
-    });
-
-    const deltas: Record<number, number> = {};
-    rows.forEach((r) => (deltas[r.id] = (adjusted[r.id] ?? r.subtotal) - r.subtotal));
-
-    const sumAdjusted = rows.reduce((acc, r) => acc + (adjusted[r.id] ?? r.subtotal), 0);
-    return { totalAjustado: sumAdjusted, deltasPorId: deltas, ajustadoPorId: adjusted };
   }, [rows]);
 
-  const totalComHonorarios = useMemo(() => {
-    if (honorariosPreview == null) return totalAjustado;
-    return totalAjustado * (1 + honorariosPreview / 100);
-  }, [totalAjustado, honorariosPreview]);
+  const totalAjustado = useMemo(
+    () => ajustadoPorItem.reduce((acc, a) => acc + a.valor, 0),
+    [ajustadoPorItem]
+  );
 
-  const lucroPrevisto = (props.recebemos ?? 0) - totalComHonorarios;
+  const deltaTotal = useMemo(() => totalAjustado - baseTotal, [baseTotal, totalAjustado]);
 
-  /* ======== ACTION: SALVAR (itens + honorários) ======== */
-  async function salvarTudo() {
+  const comHonorarios = useMemo(() => {
+    const h = honorariosPercentual === '' ? 0 : Number(honorariosPercentual) || 0;
+    return totalAjustado * (1 + h / 100);
+  }, [totalAjustado, honorariosPercentual]);
+
+  const lucroPrev = useMemo(() => props.recebemos - comHonorarios, [props.recebemos, comHonorarios]);
+
+  // ---- SUBMIT ---------------------------------------------------------------
+  async function salvar() {
     const payload = rows
       .filter((r) => r.checked)
       .map((r) => ({
         estimativaItemId: r.id,
-        percentual: parseDec(r.percentual as any),
+        // % é o único campo de ajuste (valor fixo foi removido)
+        percentual:
+          r.percentual == null || r.percentual === '' ? null : Number(r.percentual) || 0,
         observacao: r.observacao?.trim() || null,
         aplicarEmSimilares: !!r.aplicarEmSimilares,
         grupoSimilar: r.grupoSimilar ?? null,
       }));
 
-    // Pode salvar só honorários, mesmo sem itens marcados
-    const honorariosPercentual = honorariosPreview;
-
-    if (payload.length === 0 && honorariosPercentual == null) {
-      alert('Marque itens ou informe honorários para salvar.');
-      return;
-    }
-
-    startTransition(async () => {
-      const res = await upsertAjustesFinanceiros({
-        projetoId: props.projetoId,
-        usuarioId: props.usuarioId,
-        itens: payload,
-        honorariosPercentual,
-      });
-      if ((res as any)?.ok) {
-        router.refresh();
-        alert('Ajustes salvos!');
-      } else {
-        alert((res as any)?.message || 'Falha ao salvar.');
-      }
+    await upsertAjustesFinanceiros({
+      projetoId: props.projetoId,
+      usuarioId: props.usuarioId,
+      itens: payload,
+      honorariosPercentual:
+        honorariosPercentual === '' ? null : Number(honorariosPercentual) || 0,
     });
   }
 
-  /* ======== UI ======== */
+  // ---- UI -------------------------------------------------------------------
   return (
-    <div className="space-y-4">
+    <div className="mt-2">
       {/* Toolbar */}
-      <div className="rounded-lg border p-3">
-        <div className="flex flex-wrap items-center gap-3 md:gap-4">
-          {/* Ações em lote */}
-          <div className="flex items-center gap-2">
-            <button
-              className="h-8 px-3 rounded-md border text-sm"
-              onClick={() => toggleAll(true)}
-              type="button"
-            >
-              Selecionar todos
-            </button>
-            <button
-              className="h-8 px-3 rounded-md border text-sm"
-              onClick={() => toggleAll(false)}
-              type="button"
-            >
-              Limpar seleção
-            </button>
-          </div>
-
-          <div className="hidden md:block w-px h-6 bg-neutral-200" />
-
-          {/* Prévia de honorários (único campo) */}
-          <div className="flex items-center gap-2">
-            <label className="text-sm text-neutral-700">Honorários (%)</label>
-            <input
-              className="h-8 w-20 border rounded-md px-2 text-right text-sm"
-              inputMode="decimal"
-              placeholder="ex.: 10"
-              value={honorariosPreview ?? ''}
-              onChange={(e) => setHonorariosPreview(parseDec(e.currentTarget.value))}
-              title="Prévia dos honorários; será gravado junto com os ajustes."
-            />
-          </div>
+      <div className="flex flex-wrap items-center gap-3 mb-3">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => toggleAll(true)}
+            className="px-3 py-1 rounded-md border text-sm"
+          >
+            Selecionar todos
+          </button>
+          <button
+            type="button"
+            onClick={clearSelection}
+            className="px-3 py-1 rounded-md border text-sm"
+          >
+            Limpar seleção
+          </button>
         </div>
+
+        {/* Espaço visual entre botões e honorários */}
+        <div className="w-px h-6 bg-neutral-200 mx-1" />
+
+        <label className="text-sm text-neutral-600">
+          Honorários (%)
+          <input
+            className="ml-2 w-20 border rounded-md px-2 py-1 text-right"
+            inputMode="decimal"
+            placeholder="ex.: 10"
+            value={honorariosPercentual}
+            onChange={(e) => {
+              const v = e.currentTarget.value;
+              if (v === '') return setHonorariosPercentual('');
+              setHonorariosPercentual(Number(v));
+            }}
+            title="Percentual de honorários sobre o total ajustado (prévia)"
+          />
+        </label>
       </div>
+
+      {/* Respiro entre toolbar e a tabela */}
+      <div className="h-2" />
 
       {/* Tabela */}
       <div className="overflow-x-auto rounded-lg border">
-        <table className="min-w-full table-auto text-sm">
+        <table className="min-w-full text-sm">
           <thead className="bg-neutral-50 text-xs">
-            <tr className="text-neutral-700">
-              <th className="px-3 py-2 text-left w-10">Sel.</th>
+            <tr>
+              <th className="px-3 py-2 w-10 text-left">Sel.</th>
               <th className="px-3 py-2 text-left">Item</th>
-              <th className="px-3 py-2 text-right w-16">Qtd</th>
-              <th className="px-3 py-2 text-right w-24">Unit.</th>
-              <th className="px-3 py-2 text-right w-28">Subtotal</th>
-              <th className="px-3 py-2 text-right w-20">% Ajuste</th>
-              <th className="px-3 py-2 w-40">Similares</th>
-              <th className="px-3 py-2 w-56">Obs.</th>
-              <th className="px-3 py-2 text-right w-28">Ajustado</th>
-              <th className="px-3 py-2 text-right w-24">Δ</th>
+              <th className="px-3 py-2 w-16 text-right">Qtd</th>
+              <th className="px-3 py-2 w-16 text-right">Unit.</th>
+              <th className="px-3 py-2 w-24 text-right">Subtotal</th>
+              <th className="px-3 py-2 w-16 text-right">% Ajuste</th>
+              <th className="px-3 py-2 w-[11rem]">Similares</th>
+              <th className="px-3 py-2 w-48">Obs.</th>
+              <th className="px-3 py-2 w-28 text-right">Ajustado</th>
+              <th className="px-3 py-2 w-20 text-right">Δ</th>
             </tr>
           </thead>
-          <tbody className="[&>tr]:align-middle">
-            {rows.map((r) => (
-              <tr key={r.id} className="border-t">
-                <td className="px-3 py-2">
-                  <input
-                    type="checkbox"
-                    checked={r.checked}
-                    onChange={(e) => update(r.id, 'checked', e.currentTarget.checked)}
-                    aria-label={`Selecionar item ${r.nome}`}
-                  />
-                </td>
 
-                <td className="px-3 py-2">
-                  <div className="font-medium">{r.nome}</div>
-                  <div className="text-[11px] text-neutral-500">
-                    {r.tipo} {r.unidade ? `• ${r.unidade}` : ''}
-                  </div>
-                </td>
-
-                <td className="px-3 py-2 text-right whitespace-nowrap">{r.quantidade}</td>
-
-                <td className="px-3 py-2 text-right whitespace-nowrap">
-                  {r.precoUnitario.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                </td>
-
-                <td className="px-3 py-2 text-right whitespace-nowrap">
-                  {r.subtotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                </td>
-
-                <td className="px-3 py-2 text-right">
-                  <input
-                    className="h-8 w-16 border rounded-md px-2 text-right text-sm"
-                    inputMode="decimal"
-                    placeholder="%"
-                    value={r.percentual ?? ''}
-                    onChange={(e) => update(r.id, 'percentual', e.currentTarget.value)}
-                    title="Use valores positivos/negativos (ex.: 10 ou -5)"
-                  />
-                </td>
-
-                <td className="px-3 py-2">
-                  <label className="inline-flex items-center gap-2 text-xs">
+          <tbody>
+            {rows.map((r) => {
+              const aj = ajustadoPorItem.find((a) => a.id === r.id)!;
+              return (
+                <tr key={r.id} className="border-t align-middle">
+                  <td className="px-3 py-3">
                     <input
                       type="checkbox"
-                      checked={r.aplicarEmSimilares}
-                      onChange={(e) => update(r.id, 'aplicarEmSimilares', e.currentTarget.checked)}
+                      checked={r.checked}
+                      onChange={(e) => update(r.id, 'checked', e.currentTarget.checked)}
+                      aria-label={`Selecionar ${r.nome}`}
                     />
-                    similares
-                  </label>
-                  {r.grupoSimilar ? (
-                    <div className="inline-block ml-2 align-middle">
-                      <span className="text-[11px] rounded-full bg-neutral-100 px-2 py-0.5 text-neutral-600">
-                        grupo: {r.grupoSimilar}
-                      </span>
+                  </td>
+
+                  <td className="px-3 py-3">
+                    <div className="font-medium">{r.nome}</div>
+                    <div className="text-[11px] text-neutral-500">
+                      {r.tipo} {r.unidade ? `• ${r.unidade}` : ''}
                     </div>
-                  ) : null}
-                </td>
+                  </td>
 
-                <td className="px-3 py-2">
-                  <input
-                    className="h-8 w-56 border rounded-md px-2 text-sm"
-                    placeholder="Observação"
-                    value={r.observacao ?? ''}
-                    onChange={(e) => update(r.id, 'observacao', e.currentTarget.value)}
-                  />
-                </td>
+                  <td className="px-3 py-3 text-right whitespace-nowrap">{r.quantidade}</td>
+                  <td className="px-3 py-3 text-right whitespace-nowrap">
+                    {r.precoUnitario.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                  </td>
+                  <td className="px-3 py-3 text-right whitespace-nowrap">
+                    {r.subtotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                  </td>
 
-                <td className="px-3 py-2 text-right whitespace-nowrap">
-                  {(ajustadoPorId[r.id] ?? r.subtotal).toLocaleString('pt-BR', {
-                    style: 'currency',
-                    currency: 'BRL',
-                  })}
-                </td>
+                  <td className="px-3 py-3 text-right">
+                    <input
+                      className="w-16 border rounded-md px-2 py-1 text-right"
+                      inputMode="decimal"
+                      placeholder="%"
+                      value={r.percentual ?? ''}
+                      onChange={(e) => update(r.id, 'percentual', e.currentTarget.value)}
+                      title="Informe porcentagem positiva ou negativa (ex.: 10 ou -5)"
+                    />
+                  </td>
 
-                <td
-                  className={`px-3 py-2 text-right whitespace-nowrap ${
-                    (deltasPorId[r.id] ?? 0) >= 0 ? 'text-emerald-700' : 'text-red-700'
-                  }`}
-                >
-                  {(deltasPorId[r.id] ?? 0).toLocaleString('pt-BR', {
-                    style: 'currency',
-                    currency: 'BRL',
-                  })}
-                </td>
-              </tr>
-            ))}
+                  <td className="px-3 py-3">
+                    <label className="inline-flex items-center gap-2 text-xs">
+                      <input
+                        type="checkbox"
+                        checked={r.aplicarEmSimilares}
+                        onChange={(e) =>
+                          update(r.id, 'aplicarEmSimilares', e.currentTarget.checked)
+                        }
+                      />
+                      aplicar em similares
+                    </label>
+                    {r.grupoSimilar ? (
+                      <div className="text-[11px] text-neutral-500 mt-1">
+                        grupo: {r.grupoSimilar}
+                      </div>
+                    ) : null}
+                  </td>
+
+                  <td className="px-3 py-3">
+                    <input
+                      className="w-48 border rounded-md px-2 py-1"
+                      placeholder="Observação"
+                      value={r.observacao ?? ''}
+                      onChange={(e) => update(r.id, 'observacao', e.currentTarget.value)}
+                    />
+                  </td>
+
+                  <td className="px-3 py-3 text-right whitespace-nowrap">
+                    {aj.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                  </td>
+                  <td className="px-3 py-3 text-right whitespace-nowrap">
+                    {aj.delta.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
 
-      {/* Resumo ao vivo + botão salvar no rodapé */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <div className="rounded-lg border p-3">
-          <div className="text-xs text-neutral-600">Fornecedores (base)</div>
-          <div className="mt-1 font-semibold">
-            {baseTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-          </div>
+      {/* Respiro entre tabela e totais */}
+      <div className="h-4" />
+
+      {/* Totais / Prévia */}
+      <div className="grid gap-2 text-sm">
+        <div>Fornecedores (base)</div>
+        <div className="text-neutral-800">
+          {baseTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
         </div>
-        <div className="rounded-lg border p-3">
-          <div className="text-xs text-neutral-600">Fornecedores (ajustado)</div>
-          <div className="mt-1 font-semibold">
-            {totalAjustado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-          </div>
-          <div className="mt-1 text-xs text-neutral-500">
-            Δ{' '}
-            {(totalAjustado - baseTotal).toLocaleString('pt-BR', {
-              style: 'currency',
-              currency: 'BRL',
-            })}
-          </div>
+
+        <div className="mt-1">Fornecedores (ajustado)</div>
+        <div>
+          {totalAjustado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}{' '}
+          <span className="text-neutral-500 ml-1">
+            Δ {deltaTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+          </span>
         </div>
-        <div className="rounded-lg border p-3">
-          <div className="text-xs text-neutral-600">Com honorários (prévia)</div>
-          <div className="mt-1 font-semibold">
-            {totalComHonorarios.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-          </div>
-          <div className="mt-1 text-xs text-neutral-500">
-            {props.recebemos != null ? (
-              <>
-                Lucro previsto:{' '}
-                <b className={lucroPrevisto >= 0 ? 'text-emerald-700' : 'text-red-700'}>
-                  {lucroPrevisto.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                </b>
-              </>
-            ) : (
-              ' '
-            )}
-          </div>
+
+        <div className="mt-1">Com honorários (prévia)</div>
+        <div className="font-medium">
+          {comHonorarios.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+        </div>
+
+        <div className="mt-1">
+          Lucro previsto:{' '}
+          <span className={lucroPrev >= 0 ? 'text-green-700' : 'text-red-700'}>
+            {lucroPrev.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+          </span>
         </div>
       </div>
 
-      <div className="flex justify-end">
+      {/* Rodapé: ação primária com bom respiro */}
+      <div className="mt-4 flex justify-start">
         <button
-          onClick={salvarTudo}
-          disabled={isPending}
-          className="mt-2 h-9 px-5 rounded-md border border-neutral-900 bg-neutral-900 text-white text-sm font-semibold disabled:opacity-60"
-          title="Salva ajustes dos itens (selecionados) e os honorários (%)."
-          type="button"
+          onClick={salvar}
+          className="px-4 py-2 rounded-lg border border-neutral-900 bg-neutral-900 text-white font-semibold"
+          title="Cria registros em FinanceiroAjuste sem alterar a estimativa original"
         >
-          {isPending ? 'Salvando…' : 'Salvar ajustes'}
+          Salvar ajustes
         </button>
       </div>
     </div>
