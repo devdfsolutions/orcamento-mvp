@@ -43,7 +43,7 @@ export default async function Page({ searchParams }: PageProps) {
   });
   if (!me) redirect("/login");
 
-  // paginação server-side
+  // paginação
   const pageSize = 50;
   const page = Math.max(1, Number(searchParams?.p ?? "1"));
   const skip = (page - 1) * pageSize;
@@ -61,8 +61,6 @@ export default async function Page({ searchParams }: PageProps) {
         email: true,
         telefone: true,
         endereco: true,
-        createdAt: true,
-        updatedAt: true,
       },
       take: pageSize,
       skip,
@@ -72,16 +70,22 @@ export default async function Page({ searchParams }: PageProps) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
-    <main className="max-w-5xl mx-auto p-6 grid gap-6">
-      <h1 className="text-2xl font-semibold">Cadastros / Clientes</h1>
+    <main className="max-w-6xl mx-auto p-6 grid gap-6">
+      <header className="flex items-center justify-between">
+        <h1 className="text-3xl font-semibold text-zinc-900">
+          Cadastros <span className="text-zinc-400">/</span> Clientes
+        </h1>
+      </header>
 
-      {/* criar */}
-      <section className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
-        <h2 className="text-base font-medium mb-3">Novo cliente</h2>
+      {/* card criar */}
+      <section className="card">
+        <div className="card-head">
+          <h2>Novo cliente</h2>
+        </div>
 
         <form
           action={criarClienteUsuario}
-          className="grid gap-2 items-center md:grid-cols-4"
+          className="grid gap-3 items-center md:grid-cols-4"
         >
           <input type="hidden" name="usuarioId" value={me.id} />
 
@@ -89,7 +93,7 @@ export default async function Page({ searchParams }: PageProps) {
             name="nome"
             placeholder="Nome"
             required
-            className="h-10 rounded-2xl border border-zinc-300 px-3 md:col-span-1"
+            className="input md:col-span-1"
           />
 
           <MaskedInput
@@ -98,7 +102,7 @@ export default async function Page({ searchParams }: PageProps) {
             inputMode="numeric"
             maxLength={14}
             mask="cpf"
-            className="h-10 rounded-2xl border border-zinc-300 px-3"
+            className="input"
           />
 
           <MaskedInput
@@ -107,170 +111,256 @@ export default async function Page({ searchParams }: PageProps) {
             inputMode="numeric"
             maxLength={18}
             mask="cnpj"
-            className="h-10 rounded-2xl border border-zinc-300 px-3"
+            className="input"
           />
 
           <input
             name="email"
             placeholder="E-mail (opcional)"
             type="email"
-            className="h-10 rounded-2xl border border-zinc-300 px-3 md:col-span-1"
+            className="input md:col-span-1"
           />
 
-          <input
-            name="telefone"
-            placeholder="Telefone (opcional)"
-            className="h-10 rounded-2xl border border-zinc-300 px-3"
-          />
+          <input name="telefone" placeholder="Telefone (opcional)" className="input" />
 
           <input
             name="endereco"
             placeholder="Endereço (opcional)"
-            className="h-10 rounded-2xl border border-zinc-300 px-3 md:col-span-2"
+            className="input md:col-span-2"
           />
 
           <div className="md:col-span-4 flex justify-end pt-1">
-            <button
-              className="h-10 px-4 rounded-2xl border border-zinc-900 bg-zinc-900 text-white hover:opacity-90"
-            >
-              Adicionar Novo
-            </button>
+            <button className="btn btn-primary">Adicionar Novo</button>
           </div>
         </form>
       </section>
 
-      {/* lista */}
-      <section className="rounded-2xl overflow-hidden border border-zinc-200 bg-white">
-        <table className="w-full border-collapse">
-          <thead className="bg-zinc-50">
-            <tr>
-              {["ID","Nome","CPF","CNPJ","E-mail","Telefone","Endereço",""].map(h => (
-                <th key={h} className="text-left p-3 border-b border-zinc-200 font-semibold text-sm">{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {clientes.map((c) => {
-              const detailsId = `det-${c.id}`;
-              return (
-                <tr key={c.id} className="align-top">
-                  <td className="p-3 border-b">{c.id}</td>
-                  <td className="p-3 border-b">{c.nome}</td>
-                  <td className="p-3 border-b">{formatCPF(c.cpf)}</td>
-                  <td className="p-3 border-b">{formatCNPJ(c.cnpj)}</td>
-                  <td className="p-3 border-b break-words">{c.email ?? "—"}</td>
-                  <td className="p-3 border-b">{c.telefone ?? "—"}</td>
-                  <td className="p-3 border-b break-words">{c.endereco ?? "—"}</td>
+      {/* tabela */}
+      <section className="card p-0 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="table w-full">
+            <thead>
+              <tr>
+                {["ID","Nome","CPF","CNPJ","E-mail","Telefone","Endereço","Ações"].map((h) => (
+                  <th key={h}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {clientes.map((c) => {
+                const detailsId = `det-${c.id}`;
+                return (
+                  <tr key={c.id}>
+                    <td>{c.id}</td>
+                    <td className="font-medium text-zinc-900">{c.nome}</td>
+                    <td>{formatCPF(c.cpf)}</td>
+                    <td>{formatCNPJ(c.cnpj)}</td>
+                    <td className="break-words">{c.email ?? "—"}</td>
+                    <td className="whitespace-nowrap">{c.telefone ?? "—"}</td>
+                    <td className="break-words">{c.endereco ?? "—"}</td>
 
-                  <td className="p-3 border-b text-right whitespace-nowrap">
-                    <details id={detailsId} className="inline-block mr-2">
-                      <summary className="cursor-pointer inline-block px-3 py-1 rounded-2xl border bg-zinc-100 hover:bg-zinc-200 text-sm">
-                        Editar
-                      </summary>
+                    <td className="text-right whitespace-nowrap">
+                      <details id={detailsId} className="inline-block mr-2">
+                        <summary className="pill">Editar</summary>
+                        <div className="pt-3 pb-1 px-1">
+                          <RenderWhenOpen detailsId={detailsId}>
+                            <AutoCloseForm
+                              id={`edit-${c.id}`}
+                              action={atualizarClienteUsuario}
+                              className="grid gap-3 md:grid-cols-4 max-w-3xl"
+                            >
+                              <input type="hidden" name="id" value={c.id} />
 
-                      <div className="pt-2">
-                        {/* Só monta quando abrir */}
-                        <RenderWhenOpen detailsId={detailsId}>
-                          <AutoCloseForm
-                            id={`edit-${c.id}`}
-                            action={atualizarClienteUsuario}
-                            className="grid gap-2 md:grid-cols-4 max-w-3xl"
-                          >
-                            <input type="hidden" name="id" value={c.id} />
+                              <input
+                                name="nome"
+                                defaultValue={c.nome}
+                                required
+                                className="input"
+                              />
+                              <MaskedInput
+                                name="cpf"
+                                defaultValue={c.cpf ?? ""}
+                                placeholder="CPF"
+                                inputMode="numeric"
+                                maxLength={14}
+                                mask="cpf"
+                                className="input"
+                              />
+                              <MaskedInput
+                                name="cnpj"
+                                defaultValue={c.cnpj ?? ""}
+                                placeholder="CNPJ"
+                                inputMode="numeric"
+                                maxLength={18}
+                                mask="cnpj"
+                                className="input"
+                              />
+                              <input
+                                name="email"
+                                defaultValue={c.email ?? ""}
+                                placeholder="E-mail"
+                                type="email"
+                                className="input"
+                              />
+                              <input
+                                name="telefone"
+                                defaultValue={c.telefone ?? ""}
+                                placeholder="Telefone"
+                                className="input"
+                              />
+                              <input
+                                name="endereco"
+                                defaultValue={c.endereco ?? ""}
+                                placeholder="Endereço"
+                                className="input md:col-span-3"
+                              />
+                            </AutoCloseForm>
+                          </RenderWhenOpen>
+                        </div>
+                      </details>
 
-                            <input
-                              name="nome"
-                              defaultValue={c.nome}
-                              required
-                              className="h-10 rounded-2xl border border-zinc-300 px-3"
-                            />
-
-                            <MaskedInput
-                              name="cpf"
-                              defaultValue={c.cpf ?? ""}
-                              placeholder="CPF"
-                              inputMode="numeric"
-                              maxLength={14}
-                              mask="cpf"
-                              className="h-10 rounded-2xl border border-zinc-300 px-3"
-                            />
-
-                            <MaskedInput
-                              name="cnpj"
-                              defaultValue={c.cnpj ?? ""}
-                              placeholder="CNPJ"
-                              inputMode="numeric"
-                              maxLength={18}
-                              mask="cnpj"
-                              className="h-10 rounded-2xl border border-zinc-300 px-3"
-                            />
-
-                            <input
-                              name="email"
-                              defaultValue={c.email ?? ""}
-                              placeholder="E-mail"
-                              type="email"
-                              className="h-10 rounded-2xl border border-zinc-300 px-3"
-                            />
-
-                            <input
-                              name="telefone"
-                              defaultValue={c.telefone ?? ""}
-                              placeholder="Telefone"
-                              className="h-10 rounded-2xl border border-zinc-300 px-3"
-                            />
-
-                            <input
-                              name="endereco"
-                              defaultValue={c.endereco ?? ""}
-                              placeholder="Endereço"
-                              className="h-10 rounded-2xl border border-zinc-300 px-3 md:col-span-3"
-                            />
-                          </AutoCloseForm>
-                        </RenderWhenOpen>
-                      </div>
-                    </details>
-
-                    <button
-                      type="submit"
-                      form={`edit-${c.id}`}
-                      className="hidden ml-2 h-8 px-3 rounded-2xl border border-zinc-900 bg-zinc-900 text-white text-sm save-btn"
-                    >
-                      Salvar
-                    </button>
-
-                    <form action={excluirClienteUsuario} className="inline ml-2">
-                      <input type="hidden" name="id" value={c.id} />
-                      <ConfirmSubmit
-                        className="h-8 px-3 rounded-2xl border border-rose-200 bg-rose-50 text-rose-700 text-sm"
-                        message="Excluir este cliente?"
+                      <button
+                        type="submit"
+                        form={`edit-${c.id}`}
+                        className="btn btn-primary btn-sm save-btn"
                       >
-                        Excluir
-                      </ConfirmSubmit>
-                    </form>
+                        Salvar
+                      </button>
+
+                      <form action={excluirClienteUsuario} className="inline ml-2">
+                        <input type="hidden" name="id" value={c.id} />
+                        <ConfirmSubmit className="btn btn-danger btn-sm" message="Excluir este cliente?">
+                          Excluir
+                        </ConfirmSubmit>
+                      </form>
+                    </td>
+                  </tr>
+                );
+              })}
+
+              {clientes.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="text-center text-zinc-500 py-8">
+                    Nenhum cliente cadastrado.
                   </td>
                 </tr>
-              );
-            })}
+              )}
+            </tbody>
+          </table>
+        </div>
 
-            {clientes.length === 0 && (
-              <tr>
-                <td className="p-4 text-center text-zinc-600" colSpan={8}>
-                  Nenhum cliente cadastrado.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-
+        {/* CSS: Tailwind helpers + Fallback bonito */}
         <style>{`
-          /* Mostrar botão Salvar quando o details estiver aberto */
-          td .save-btn { display: none; }
-          td details[open] + .save-btn { display: inline-block; }
+          /* ===== tokens ===== */
+          :root{
+            --bg: #ffffff;
+            --border: #e6e7eb;
+            --muted: #f7f7fb;
+            --text: #0a0a0a;
+            --subtext: #6b7280;
+            --primary: #0f172a; /* preto azulado */
+            --primary-hover: #0b1222;
+            --accent: #2563eb; /* azul */
+            --danger-bg: #fff1f2;
+            --danger-text: #be123c;
+            --ring: rgba(37,99,235,.25);
+          }
 
-          /* Tira o "triângulo" padrão e estiliza o summary como botão */
-          details > summary::-webkit-details-marker { display: none; }
-          details > summary { list-style: none; }
+          /* ===== layout cards ===== */
+          .card{
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 16px;
+            box-shadow: 0 1px 3px rgba(16,24,40,.04);
+          }
+          .card-head{
+            display:flex; align-items:center; justify-content:space-between;
+            margin-bottom: 10px;
+          }
+          .card-head h2{
+            margin:0; font-size: 1rem; font-weight: 600; color: var(--text);
+          }
+
+          /* ===== inputs ===== */
+          .input{
+            height: 40px;
+            padding: 0 12px;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            outline: none;
+            background: #fff;
+          }
+          .input:focus{
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--ring);
+          }
+
+          /* ===== buttons ===== */
+          .btn{
+            display:inline-flex; align-items:center; justify-content:center;
+            border: 1px solid var(--border);
+            border-radius: 9999px;
+            padding: 0 14px;
+            height: 40px;
+            font-weight: 500;
+            background: #f9fafb;
+            color: var(--text);
+            cursor: pointer;
+            transition: .15s ease;
+          }
+          .btn:hover{ background:#f3f4f6; }
+          .btn-sm{ height: 32px; padding: 0 12px; font-size: .875rem; }
+          .btn-primary{
+            background: var(--primary);
+            border-color: var(--primary);
+            color: #fff;
+          }
+          .btn-primary:hover{ background: var(--primary-hover); }
+          .btn-danger{
+            background: var(--danger-bg);
+            color: var(--danger-text);
+            border-color: #fecdd3;
+          }
+          .btn-danger:hover{ background: #ffe4e6; }
+
+          /* ===== pill (summary) ===== */
+          details > summary::-webkit-details-marker{ display:none; }
+          details > summary{ list-style:none; }
+          .pill{
+            display:inline-block; padding: 6px 12px;
+            border-radius: 9999px;
+            border: 1px solid var(--border);
+            background: var(--muted);
+            color: var(--text);
+            cursor: pointer;
+            font-size: .875rem;
+          }
+          .pill:hover{ background:#eef2ff; border-color:#dfe3f1 }
+
+          /* ===== table ===== */
+          .table{ border-collapse: collapse; min-width: 100%; }
+          .table thead th{
+            background: #f8fafc;
+            color: var(--subtext);
+            text-align: left;
+            font-weight: 600;
+            font-size: .875rem;
+            padding: 12px 14px;
+            border-bottom: 1px solid var(--border);
+            position: sticky; top: 0; z-index: 1;
+          }
+          .table tbody td{
+            padding: 12px 14px;
+            border-bottom: 1px solid var(--border);
+            vertical-align: top;
+            color: var(--text);
+          }
+          .table tbody tr:hover td{ background: #fafafa; }
+
+          /* mostrar botão salvar quando details abre */
+          td .save-btn{ display:none; }
+          td details[open] + .save-btn{ display:inline-flex; }
         `}</style>
       </section>
 
@@ -282,18 +372,14 @@ export default async function Page({ searchParams }: PageProps) {
         <a
           href={`?p=${Math.max(1, page - 1)}`}
           aria-disabled={page <= 1}
-          className={`h-9 px-3 rounded-2xl border text-sm ${
-            page <= 1 ? "pointer-events-none opacity-40" : "hover:bg-zinc-50"
-          }`}
+          className={`btn btn-sm ${page <= 1 ? "opacity-40 pointer-events-none" : ""}`}
         >
           Anterior
         </a>
         <a
           href={`?p=${Math.min(totalPages, page + 1)}`}
           aria-disabled={page >= totalPages}
-          className={`h-9 px-3 rounded-2xl border text-sm ${
-            page >= totalPages ? "pointer-events-none opacity-40" : "hover:bg-zinc-50"
-          }`}
+          className={`btn btn-sm ${page >= totalPages ? "opacity-40 pointer-events-none" : ""}`}
         >
           Próxima
         </a>
