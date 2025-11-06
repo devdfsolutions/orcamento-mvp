@@ -16,18 +16,16 @@ export const dynamic = "force-dynamic";
 
 /* ===== helpers ===== */
 const digits = (s?: string | null) => (s ? s.replace(/\D+/g, "") : "");
-
-function formatCPF(v?: string | null) {
+const formatCPF = (v?: string | null) => {
   const d = digits(v);
   if (d.length !== 11) return v || "—";
   return d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
-}
-
-function formatCNPJ(v?: string | null) {
+};
+const formatCNPJ = (v?: string | null) => {
   const d = digits(v);
   if (d.length !== 14) return v || "—";
   return d.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
-}
+};
 
 type PageProps = { searchParams?: { p?: string } };
 
@@ -70,20 +68,20 @@ export default async function Page({ searchParams }: PageProps) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
-    <main className="max-w-6xl mx-auto p-6 grid gap-6">
-      <h1 className="text-3xl font-semibold text-zinc-900">
+    <main className="max-w-[980px] mr-auto ml-6 p-6 grid gap-5">
+      <h1 className="text-2xl font-semibold text-zinc-900">
         Cadastros <span className="text-zinc-400">/</span> Clientes
       </h1>
 
       {/* card criar */}
       <section className="card">
-        <div className="card-head">
+        <div className="card-head mb-2">
           <h2>Novo cliente</h2>
         </div>
 
         <form
           action={criarClienteUsuario}
-          className="grid gap-3 items-center md:grid-cols-4"
+          className="grid gap-2 items-center md:grid-cols-4"
         >
           <input type="hidden" name="usuarioId" value={me.id} />
 
@@ -97,7 +95,6 @@ export default async function Page({ searchParams }: PageProps) {
             mask="cpf"
             className="input"
           />
-
           <MaskedInput
             name="cnpj"
             placeholder="CNPJ (opcional)"
@@ -106,21 +103,11 @@ export default async function Page({ searchParams }: PageProps) {
             mask="cnpj"
             className="input"
           />
-
-          <input
-            name="email"
-            placeholder="E-mail (opcional)"
-            type="email"
-            className="input"
-          />
+          <input name="email" placeholder="E-mail (opcional)" type="email" className="input" />
           <input name="telefone" placeholder="Telefone (opcional)" className="input" />
-          <input
-            name="endereco"
-            placeholder="Endereço (opcional)"
-            className="input md:col-span-2"
-          />
+          <input name="endereco" placeholder="Endereço (opcional)" className="input md:col-span-2" />
 
-          <div className="md:col-span-4 flex justify-end pt-1">
+          <div className="md:col-span-4 flex justify-start pt-1">
             <button className="btn btn-primary">Adicionar Novo</button>
           </div>
         </form>
@@ -130,6 +117,18 @@ export default async function Page({ searchParams }: PageProps) {
       <section className="card p-0 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="table w-full">
+            {/* larguras fixas por coluna */}
+            <colgroup>
+              <col style={{ width: "56px" }} />     {/* ID */}
+              <col style={{ width: "18%" }} />      {/* Nome */}
+              <col style={{ width: "16%" }} />      {/* CPF */}
+              <col style={{ width: "16%" }} />      {/* CNPJ */}
+              <col style={{ width: "20%" }} />      {/* E-mail */}
+              <col style={{ width: "14%" }} />      {/* Telefone */}
+              <col />                                {/* Endereço (auto) */}
+              <col style={{ width: "120px" }} />    {/* Ações */}
+            </colgroup>
+
             <thead>
               <tr>
                 {["ID","Nome","CPF","CNPJ","E-mail","Telefone","Endereço","Ações"].map((h) => (
@@ -137,6 +136,7 @@ export default async function Page({ searchParams }: PageProps) {
                 ))}
               </tr>
             </thead>
+
             <tbody>
               {clientes.map((c) => {
                 const detailsId = `det-${c.id}`;
@@ -147,7 +147,6 @@ export default async function Page({ searchParams }: PageProps) {
                     {/* ID */}
                     <td>
                       <span className="cell-view">{c.id}</span>
-                      {/* não editável */}
                     </td>
 
                     {/* Nome */}
@@ -273,46 +272,39 @@ export default async function Page({ searchParams }: PageProps) {
           </table>
         </div>
 
-        {/* estilos (palette cinza/azul/preto/branco) */}
+        {/* estilos compactos + paleta cinza/azul/preto/branco */}
         <style>{`
           :root{
-            --bg: #ffffff;
-            --border: #e6e7eb;
-            --muted: #f7f7fb;
-            --text: #0a0a0a;
-            --subtext: #6b7280;
-            --primary: #0f172a;
-            --primary-hover: #0b1222;
-            --accent: #2563eb;
-            --danger-bg: #fff1f2;
-            --danger-text: #be123c;
-            --ring: rgba(37,99,235,.25);
+            --bg:#fff; --border:#e6e7eb; --muted:#f7f7fb;
+            --text:#0a0a0a; --subtext:#6b7280;
+            --primary:#0f172a; --primary-hover:#0b1222;
+            --accent:#2563eb; --ring:rgba(37,99,235,.25);
+            --danger-bg:#fff1f2; --danger-text:#be123c;
           }
 
-          .card{ background:var(--bg); border:1px solid var(--border); border-radius:16px; padding:16px; box-shadow:0 1px 3px rgba(16,24,40,.04); }
-          .card-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
-          .card-head h2{ margin:0; font-size:1rem; font-weight:600; color:var(--text); }
+          .card{ background:var(--bg); border:1px solid var(--border); border-radius:12px; padding:12px; box-shadow:0 1px 2px rgba(16,24,40,.04); }
+          .card-head h2{ margin:0; font-size:.95rem; font-weight:600; color:var(--text); }
 
-          .input{ height:40px; padding:0 12px; border:1px solid var(--border); border-radius:12px; outline:none; background:#fff; }
+          .input{ height:36px; padding:0 10px; border:1px solid var(--border); border-radius:10px; outline:none; background:#fff; font-size:.95rem; }
           .input:focus{ border-color:var(--accent); box-shadow:0 0 0 3px var(--ring); }
-          .input-sm{ height:36px; padding:0 10px; font-size:.925rem; }
+          .input-sm{ height:32px; padding:0 8px; font-size:.9rem; }
 
-          .btn{ display:inline-flex; align-items:center; justify-content:center; border:1px solid var(--border); border-radius:9999px; padding:0 14px; height:40px; font-weight:500; background:#f9fafb; color:var(--text); cursor:pointer; transition:.15s ease; }
+          .btn{ display:inline-flex; align-items:center; justify-content:center; border:1px solid var(--border); border-radius:9999px; padding:0 12px; height:36px; font-weight:500; background:#f9fafb; color:var(--text); cursor:pointer; transition:.15s; font-size:.95rem; }
           .btn:hover{ background:#f3f4f6; }
-          .btn-sm{ height:32px; padding:0 12px; font-size:.875rem; }
+          .btn-sm{ height:30px; padding:0 10px; font-size:.85rem; }
           .btn-primary{ background:var(--primary); border-color:var(--primary); color:#fff; }
           .btn-primary:hover{ background:var(--primary-hover); }
           .btn-danger{ background:var(--danger-bg); color:var(--danger-text); border-color:#fecdd3; }
           .btn-danger:hover{ background:#ffe4e6; }
 
-          details > summary::-webkit-details-marker{ display:none; }
-          details > summary{ list-style:none; }
-          .pill{ display:inline-block; padding:6px 12px; border-radius:9999px; border:1px solid var(--border); background:var(--muted); color:var(--text); cursor:pointer; font-size:.875rem; }
+          details>summary::-webkit-details-marker{ display:none; }
+          details>summary{ list-style:none; }
+          .pill{ display:inline-block; padding:5px 10px; border-radius:9999px; border:1px solid var(--border); background:var(--muted); color:var(--text); cursor:pointer; font-size:.85rem; }
           .pill:hover{ background:#eef2ff; border-color:#dfe3f1; }
 
-          .table{ border-collapse:collapse; min-width:100%; }
-          .table thead th{ background:#f8fafc; color:var(--subtext); text-align:left; font-weight:600; font-size:.875rem; padding:12px 14px; border-bottom:1px solid var(--border); position:sticky; top:0; z-index:1; }
-          .table tbody td{ padding:12px 14px; border-bottom:1px solid var(--border); vertical-align:top; color:var(--text); }
+          .table{ border-collapse:collapse; table-layout:fixed; min-width:100%; font-size:.95rem; }
+          .table thead th{ background:#f8fafc; color:var(--subtext); text-align:left; font-weight:600; font-size:.85rem; padding:10px 12px; border-bottom:1px solid var(--border); }
+          .table tbody td{ padding:10px 12px; border-bottom:1px solid var(--border); vertical-align:middle; color:var(--text); }
           .table tbody tr:hover td{ background:#fafafa; }
 
           /* inline edit: mostra/oculta view x input */
@@ -326,8 +318,8 @@ export default async function Page({ searchParams }: PageProps) {
         `}</style>
       </section>
 
-      {/* paginação */}
-      <nav className="flex items-center justify-end gap-2">
+      {/* paginação compacta */}
+      <nav className="flex items-center justify-start gap-2">
         <span className="text-sm text-zinc-500">
           {total} registro(s) • página {page} de {totalPages}
         </span>
