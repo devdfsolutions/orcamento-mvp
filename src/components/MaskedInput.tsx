@@ -1,59 +1,50 @@
-'use client';
+"use client";
 
-import * as React from 'react';
+import React, { forwardRef, InputHTMLAttributes, useCallback } from "react";
 
-type MaskKind = 'cpf' | 'cnpj' | 'phone';
+type MaskType = "cpf" | "cnpj" | "none";
 
-function formatCPF(v: string) {
-  const s = v.replace(/\D+/g, '').slice(0, 11);
-  return s
-    .replace(/^(\d{3})(\d)/, '$1.$2')
-    .replace(/^(\d{3})\.(\d{3})(\d)/, '$1.$2.$3')
-    .replace(/^(\d{3})\.(\d{3})\.(\d{3})(\d)/, '$1.$2.$3-$4');
-}
-function formatCNPJ(v: string) {
-  const s = v.replace(/\D+/g, '').slice(0, 14);
-  return s
-    .replace(/^(\d{2})(\d)/, '$1.$2')
-    .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
-    .replace(/^(\d{2})\.(\d{3})\.(\d{3})(\d)/, '$1.$2.$3/$4')
-    .replace(/^(\d{2})\.(\d{3})\.(\d{3})\/(\d{4})(\d)/, '$1.$2.$3/$4-$5');
-}
-function formatPhone(v: string) {
-  const s = v.replace(/\D+/g, '').slice(0, 11);
-  if (s.length <= 10) {
-    return s
-      .replace(/^(\d{2})(\d)/, '($1) $2')
-      .replace(/(\d{4})(\d{4})$/, '$1-$2');
-  }
-  return s
-    .replace(/^(\d{2})(\d)/, '($1) $2')
-    .replace(/(\d{5})(\d{4})$/, '$1-$2');
+function onlyDigits(v: string) {
+  return v.replace(/\D+/g, "");
 }
 
-const formatMap: Record<MaskKind, (v: string) => string> = {
-  cpf: formatCPF,
-  cnpj: formatCNPJ,
-  phone: formatPhone,
+function maskCPF(v: string) {
+  const d = onlyDigits(v).slice(0, 11);
+  return d
+    .replace(/(\d{3})(\d)/, "$1.$2")
+    .replace(/(\d{3})(\d)/, "$1.$2")
+    .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
+}
+
+function maskCNPJ(v: string) {
+  const d = onlyDigits(v).slice(0, 14);
+  return d
+    .replace(/^(\d{2})(\d)/, "$1.$2")
+    .replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3")
+    .replace(/\.(\d{3})(\d)/, ".$1/$2")
+    .replace(/(\d{4})(\d)/, "$1-$2");
+}
+
+type Props = InputHTMLAttributes<HTMLInputElement> & {
+  mask?: MaskType;
 };
 
-export default function MaskedInput(
-  { mask, defaultValue, onChange, ...props }:
-  React.InputHTMLAttributes<HTMLInputElement> & { mask: MaskKind }
+const MaskedInput = forwardRef<HTMLInputElement, Props>(function MaskedInput(
+  { mask = "none", onInput, ...rest },
+  ref
 ) {
-  const [value, setValue] = React.useState<string>(
-    typeof defaultValue === 'string' ? defaultValue : String(defaultValue ?? '')
+  const handleInput = useCallback<NonNullable<Props["onInput"]>>(
+    (e) => {
+      const el = e.currentTarget;
+      const v = el.value || "";
+      if (mask === "cpf") el.value = maskCPF(v);
+      else if (mask === "cnpj") el.value = maskCNPJ(v);
+      onInput?.(e);
+    },
+    [mask, onInput]
   );
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const raw = e.target.value ?? '';
-    const formatted = formatMap[mask](raw);
-    setValue(formatted);
-    // propagar o evento como se fosse um input normal
-    if (onChange) onChange({ ...e, target: { ...e.target, value: formatted } } as any);
-  };
+  return <input ref={ref} onInput={handleInput} {...rest} />;
+});
 
-  return (
-    <input {...props} value={value} onChange={handleChange} />
-  );
-}
+export default MaskedInput;
