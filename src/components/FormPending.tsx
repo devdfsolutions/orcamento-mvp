@@ -3,21 +3,7 @@
 import * as React from 'react';
 import { useFormStatus } from 'react-dom';
 
-/**
- * Mostra um overlay “aguarde…” enquanto QUALQUER <form> com estes
- * componentes estiver em submissão (pending).
- *
- * Como usar:
- * <form action={...}>
- *   <PendingOverlay />
- *   <PendingFieldset>
- *     ... inputs ...
- *     <SubmitButton>Salvar</SubmitButton>
- *   </PendingFieldset>
- * </form>
- */
-
-/* ============ estilos ============ */
+/* ===================== estilos ===================== */
 const overlayStyle: React.CSSProperties = {
   position: 'fixed',
   inset: 0,
@@ -51,12 +37,11 @@ const spinnerStyle: React.CSSProperties = {
   animation: 'spin 0.8s linear infinite',
 };
 
-/* animação do spinner */
 const GlobalStyles = () => (
   <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 );
 
-/* ============ componentes ============ */
+/* ===================== named exports ===================== */
 
 /** Overlay de carregamento enquanto o form está pendente */
 export function PendingOverlay() {
@@ -75,31 +60,35 @@ export function PendingOverlay() {
   );
 }
 
-/** Envolve os campos e os desabilita enquanto pending = true */
+/** Envolve inputs e os desabilita quando pending = true */
 export function PendingFieldset({
   children,
   style,
+  className,
 }: {
   children: React.ReactNode;
   style?: React.CSSProperties;
+  className?: string;
 }) {
   const { pending } = useFormStatus();
   return (
-    <fieldset disabled={pending} style={style}>
+    <fieldset disabled={pending} style={style} className={className}>
       {children}
     </fieldset>
   );
 }
 
-/** Botão submit que troca o rótulo e bloqueia durante o pending */
+/** Botão submit que troca rótulo enquanto pending = true */
 export function SubmitButton({
   children,
   pendingText = 'Salvando...',
   style,
+  className,
 }: {
   children: React.ReactNode;
   pendingText?: string;
   style?: React.CSSProperties;
+  className?: string;
 }) {
   const { pending } = useFormStatus();
   return (
@@ -117,8 +106,70 @@ export function SubmitButton({
         opacity: pending ? 0.75 : 1,
         ...style,
       }}
+      className={className}
     >
       {pending ? pendingText : children}
     </button>
+  );
+}
+
+/* ===================== default export ===================== */
+
+type FormPendingProps = {
+  /** Server Action do formulário */
+  action: (formData: FormData) => Promise<void>;
+  /** Texto do botão */
+  submitText?: string;
+  /** Texto durante o pending */
+  submittingText?: string;
+  /** Estilos/classe do <form> */
+  style?: React.CSSProperties;
+  className?: string;
+  /** Alinhamento do botão: 'start' | 'center' | 'end' */
+  submitAlign?: 'start' | 'center' | 'end';
+  /** Classe extra no botão */
+  submitClassName?: string;
+  /** Estilo extra no botão */
+  submitStyle?: React.CSSProperties;
+  children: React.ReactNode;
+};
+
+/**
+ * Wrapper pronto pra usar:
+ * <FormPending action={save} submitText="Salvar">
+ *   ...inputs...
+ * </FormPending>
+ *
+ * Renderiza:
+ * - <form action=...>
+ *   - <PendingOverlay/>
+ *   - <PendingFieldset> {children} </PendingFieldset>
+ *   - <SubmitButton>Salvar</SubmitButton>
+ */
+export default function FormPending({
+  action,
+  submitText = 'Salvar',
+  submittingText = 'Salvando...',
+  style,
+  className,
+  submitAlign = 'end',
+  submitClassName,
+  submitStyle,
+  children,
+}: FormPendingProps) {
+  const justify =
+    submitAlign === 'start' ? 'flex-start' : submitAlign === 'center' ? 'center' : 'flex-end';
+
+  return (
+    <form action={action} style={style} className={className}>
+      <PendingOverlay />
+      <PendingFieldset>{children}</PendingFieldset>
+
+      <div style={{ display: 'flex', justifyContent: justify, marginTop: 8 }}>
+        <SubmitButton pendingText={submittingText} className={submitClassName} style={submitStyle}>
+          {submitText}
+        </SubmitButton>
+      </div>
+    </form>
   );
 }
