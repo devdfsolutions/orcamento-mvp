@@ -184,12 +184,12 @@ if (searchParams?.e === "NEXT_REDIRECT") {
           <table className="table w-full">
             <colgroup>
               <col style={{ width: "60px" }} />   {/* ID */}
-              <col style={{ width: "26%" }} />    {/* Nome */}
-              <col style={{ width: "10%" }} />    {/* Tipo */}
-              <col style={{ width: "8%" }} />     {/* UM */}
-              <col style={{ width: "14%" }} />    {/* Categoria */}
+              <col style={{ width: "30%" }} />    {/* Nome */}
+              <col style={{ width: "30%" }} />    {/* Tipo */}
+              <col style={{ width: "10%" }} />     {/* UM */}
+              <col style={{ width: "25%" }} />    {/* Categoria */}
               <col style={{ width: "25%" }} />    {/* P1 */}
-              <col style={{ width: "18%" }} />    {/* Forn P1 */}
+              <col style={{ width: "30%" }} />    {/* Forn P1 */}
               <col style={{ width: "25%" }} />    {/* P3 */}
               <col style={{ width: "30%" }} />    {/* Forn P3 */}
               <col style={{ width: "120px" }} />  {/* Ações */}
