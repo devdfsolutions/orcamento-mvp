@@ -5,11 +5,7 @@ import { getSupabaseServer } from "@/lib/supabaseServer";
 import { redirect } from "next/navigation";
 import { upsertVinculo, excluirVinculo } from "@/actions/vinculos";
 import InlineVinculoRow from "@/components/InlineVinculoRow";
-import {
-  PendingOverlay,
-  PendingFieldset,
-  SubmitButton,
-} from "@/components/FormPending";
+import { PendingOverlay, PendingFieldset, SubmitButton } from "@/components/FormPending";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +14,7 @@ export default async function Page({
 }: {
   searchParams?: { e?: string; ok?: string };
 }) {
-  // Auth
+  // auth
   const supabase = await getSupabaseServer();
   const {
     data: { user },
@@ -31,12 +27,11 @@ export default async function Page({
   });
   if (!me) redirect("/login");
 
-  // limpa NEXT_REDIRECT da URL
   if (searchParams?.e === "NEXT_REDIRECT") {
     redirect("/cadastros/vinculos");
   }
 
-  // Dados (somente do meu usuário)
+  // data
   const [fornecedores, produtos, vinculos] = await Promise.all([
     prisma.fornecedor.findMany({
       where: { usuarioId: me.id },
@@ -72,8 +67,7 @@ export default async function Page({
   return (
     <main className="max-w-[1200px] mr-auto ml-6 p-6 grid gap-5">
       <h1 className="text-2xl font-semibold text-zinc-900">
-        Cadastros <span className="text-zinc-400">/</span> Vínculos Fornecedor ↔
-        Produto
+        Cadastros <span className="text-zinc-400">/</span> Vínculos Fornecedor ↔ Produto
       </h1>
 
       {msgErro && (
@@ -87,134 +81,72 @@ export default async function Page({
         </div>
       )}
 
-      {/* Novo/Atualizar vínculo (upsert) */}
+      {/* form */}
       <section className="card relative">
         <div className="card-head mb-2">
           <h2>Criar/Atualizar vínculo (upsert)</h2>
         </div>
 
-        <form
-          action={upsertVinculo}
-          className="grid gap-2 grid-cols-[1fr_1fr_1fr_1fr] items-center"
-        >
+        <form action={upsertVinculo} className="grid gap-3">
           <PendingOverlay />
-
           <PendingFieldset>
-            <select
-              name="fornecedorId"
-              defaultValue=""
-              required
-              className="input h-9"
-            >
-              <option value="" disabled>
-                Fornecedor
-              </option>
-              {fornecedores.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.nome}
-                </option>
-              ))}
-            </select>
+            {/* linha 1 */}
+            <div className="grid gap-2 grid-cols-[2fr_2fr_1fr_3fr]">
+              <select name="fornecedorId" defaultValue="" required className="input h-9">
+                <option value="" disabled>Fornecedor</option>
+                {fornecedores.map((f) => (
+                  <option key={f.id} value={f.id}>{f.nome}</option>
+                ))}
+              </select>
 
-            <select
-              name="produtoId"
-              defaultValue=""
-              required
-              className="input h-9"
-            >
-              <option value="" disabled>
-                Produto/Serviço
-              </option>
-              {produtos.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.nome} {p.unidade?.sigla ? `(${p.unidade.sigla})` : ""}
-                </option>
-              ))}
-            </select>
+              <select name="produtoId" defaultValue="" required className="input h-9">
+                <option value="" disabled>Produto/Serviço</option>
+                {produtos.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.nome} {p.unidade?.sigla ? `(${p.unidade.sigla})` : ""}
+                  </option>
+                ))}
+              </select>
 
-            <input
-              name="dataUltAtual"
-              placeholder="Data (DD/MM/AAAA)"
-              className="input"
-              inputMode="numeric"
-            />
-            <input
-              name="observacao"
-              placeholder="Observação (opcional)"
-              className="input"
-            />
+              <input
+                name="dataUltAtual"
+                placeholder="Data (DD/MM/AAAA)"
+                className="input"
+                inputMode="numeric"
+              />
+              <input
+                name="observacao"
+                placeholder="Observação (opcional)"
+                className="input"
+              />
+            </div>
 
-            {/* Materiais P1/P2/P3 */}
-            <input
-              name="precoMatP1"
-              placeholder="Materiais P1 (R$)"
-              inputMode="decimal"
-              className="input"
-            />
-            <input
-              name="precoMatP2"
-              placeholder="Materiais P2 (R$)"
-              inputMode="decimal"
-              className="input"
-            />
-            <input
-              name="precoMatP3"
-              placeholder="Materiais P3 (R$)"
-              inputMode="decimal"
-              className="input"
-            />
+            {/* linha 2 */}
+            <div className="grid gap-2 grid-cols-6">
+              <input name="precoMatP1" placeholder="Materiais P1 (R$)" inputMode="decimal" className="input" />
+              <input name="precoMatP2" placeholder="Materiais P2 (R$)" inputMode="decimal" className="input" />
+              <input name="precoMatP3" placeholder="Materiais P3 (R$)" inputMode="decimal" className="input" />
+              <input name="precoMoM1"  placeholder="Mão de Obra M1 (R$)" inputMode="decimal" className="input" />
+              <input name="precoMoM2"  placeholder="Mão de Obra M2 (R$)" inputMode="decimal" className="input" />
+              <input name="precoMoM3"  placeholder="Mão de Obra M3 (R$)" inputMode="decimal" className="input" />
+            </div>
 
-            {/* Mão de obra M1/M2/M3 */}
-            <input
-              name="precoMoM1"
-              placeholder="Mão de Obra M1 (R$)"
-              inputMode="decimal"
-              className="input"
-            />
-            <input
-              name="precoMoM2"
-              placeholder="Mão de Obra M2 (R$)"
-              inputMode="decimal"
-              className="input"
-            />
-            <input
-              name="precoMoM3"
-              placeholder="Mão de Obra M3 (R$)"
-              inputMode="decimal"
-              className="input"
-            />
-
-            <div className="col-span-4 flex justify-end">
+            <div className="flex justify-end">
               <SubmitButton className="btn btn-primary">Salvar</SubmitButton>
             </div>
           </PendingFieldset>
         </form>
 
         <p className="mt-2 text-xs text-zinc-500">
-          Dica: selecione o mesmo fornecedor+produto e preencha novos valores
-          para atualizar (upsert).
+          Dica: selecione o mesmo fornecedor+produto e preencha novos valores para atualizar (upsert).
         </p>
       </section>
 
-      {/* Lista */}
+      {/* lista */}
       <section className="card p-0 overflow-hidden">
         <div className="table-wrap">
           <table className="table w-full">
-            <colgroup>
-              <col style={{ width: "28%" }} />
-              <col style={{ width: "22%" }} />
-              <col style={{ width: "8%" }} />
-              <col style={{ width: 80 }} />
-              <col style={{ width: 80 }} />
-              <col style={{ width: 80 }} />
-              <col style={{ width: 80 }} />
-              <col style={{ width: 80 }} />
-              <col style={{ width: 80 }} />
-              <col style={{ width: "12%" }} />
-              <col />
-              <col style={{ width: "140px" }} />
-            </colgroup>
-
+            {/* sem colgroup fixo para evitar corte; deixa o browser dimensionar */}
             <thead>
               <tr>
                 <th>Produto/Serviço</th>
@@ -228,7 +160,7 @@ export default async function Page({
                 <th className="text-right">M3</th>
                 <th>Atualização</th>
                 <th>Obs</th>
-                <th></th>
+                <th style={{ width: 140 }}></th>
               </tr>
             </thead>
 
@@ -264,14 +196,12 @@ export default async function Page({
           </table>
         </div>
 
-        {/* estilos locais (mesmos tokens das outras telas) */}
         <style>{`
           :root{
             --bg:#fff; --border:#e6e7eb; --muted:#f7f7fb;
             --text:#0a0a0a; --subtext:#6b7280;
             --primary:#0f172a; --primary-hover:#0b1222;
             --accent:#2563eb; --ring:rgba(37,99,235,.25);
-            --danger-bg:#fff1f2; --danger-text:#be123c;
           }
           .card{ background:var(--bg); border:1px solid var(--border); border-radius:12px; padding:12px; box-shadow:0 1px 2px rgba(16,24,40,.04); }
           .card-head h2{ margin:0; font-size:.95rem; font-weight:600; color:var(--text); }
@@ -285,16 +215,17 @@ export default async function Page({
           .btn-primary:hover{ background:var(--primary-hover); }
 
           .table-wrap{ overflow-x:auto; }
-          .table{ border-collapse:collapse; table-layout:fixed; width:100%; font-size:.95rem; }
+          .table{ border-collapse:collapse; table-layout:auto; width:100%; font-size:.95rem; }
           .table thead th{
             background:#f8fafc; color:var(--subtext); text-align:left; font-weight:600; font-size:.85rem;
-            padding:10px 12px; border-bottom:1px solid var(--border);
+            padding:10px 12px; border-bottom:1px solid var(--border); white-space:nowrap;
           }
           .table thead th.text-right{ text-align:right; }
           .table thead th.text-center{ text-align:center; }
           .table tbody td{
             padding:10px 12px; border-bottom:1px solid var(--border); vertical-align:middle; color:var(--text);
-            overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+            /* >>> sem corte: mostra tudo */
+            white-space:normal; overflow:visible; text-overflow:clip; word-break:break-word;
           }
           .table tbody tr:hover td{ background:#fafafa; }
         `}</style>
