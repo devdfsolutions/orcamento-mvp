@@ -23,12 +23,12 @@ export default async function Page({
   });
   if (!me) redirect("/login");
 
-  // 👉 limpa URL “suja” de redirect do Next (evita travar o próximo submit)
+  // limpa URL “suja” do Next, se vier
   if (searchParams?.e === "NEXT_REDIRECT") {
     redirect("/cadastros/unidades");
   }
 
-  // carrega do meu usuário
+  // dados
   const unidades = await prisma.unidadeMedida.findMany({
     where: { usuarioId: me.id },
     orderBy: { sigla: "asc" },
@@ -45,7 +45,6 @@ export default async function Page({
         cadastros<span className="text-zinc-400">/</span>unidades
       </h1>
 
-      {/* avisos */}
       {msgErro && (
         <div className="rounded-xl border border-rose-200 bg-rose-50 text-rose-800 px-3 py-2 text-sm">
           {msgErro}
@@ -57,7 +56,7 @@ export default async function Page({
         </div>
       )}
 
-      {/* Card criar/atualizar (upsert pela sigla) */}
+      {/* Novo / Upsert */}
       <section className="card relative">
         <div className="card-head mb-2">
           <h2>Nova unidade</h2>
@@ -65,23 +64,10 @@ export default async function Page({
 
         <form action={criarUnidade} className="grid gap-2 items-center grid-cols-[220px_1fr_auto]">
           <PendingOverlay />
-
           <PendingFieldset>
             <input type="hidden" name="usuarioId" value={me.id} />
-
-            <input
-              name="sigla"
-              placeholder="Sigla (ex: m², m, cm, un, h)"
-              required
-              className="input"
-            />
-            <input
-              name="nome"
-              placeholder="Nome (ex: Metro quadrado)"
-              required
-              className="input"
-            />
-
+            <input name="sigla" placeholder="Sigla (ex: m², m, cm, un, h)" required className="input" />
+            <input name="nome" placeholder="Nome (ex: Metro quadrado)" required className="input" />
             <SubmitButton className="btn btn-primary">Salvar</SubmitButton>
           </PendingFieldset>
         </form>
@@ -92,32 +78,23 @@ export default async function Page({
         <div className="table-wrap">
           <table className="table w-full">
             <colgroup>
-              <col style={{ width: "160px" }} /> {/* Sigla */}
-              <col />                              {/* Nome */}
-              <col style={{ width: "110px" }} />  {/* Ações */}
+              <col style={{ width: "160px" }} />
+              <col />
+              <col style={{ width: "110px" }} />
             </colgroup>
-
             <thead>
               <tr>
-                {["Sigla", "Nome", "Ações"].map((h) => (
-                  <th key={h}>{h}</th>
-                ))}
+                {["Sigla", "Nome", "Ações"].map((h) => <th key={h}>{h}</th>)}
               </tr>
             </thead>
-
             <tbody>
               {unidades.map((u) => (
                 <tr key={u.id}>
                   <td className="font-medium text-zinc-900">{u.sigla}</td>
                   <td className="break-words">{u.nome}</td>
                   <td className="text-right whitespace-nowrap">
-                    <form
-                      action={async () => {
-                        "use server";
-                        await excluirUnidade(u.id);
-                      }}
-                      className="inline-block"
-                    >
+                    <form action={excluirUnidade} className="inline-block">
+                      <input type="hidden" name="id" value={String(u.id)} />
                       <ConfirmSubmit className="btn btn-danger btn-sm" message="Excluir esta unidade?">
                         Excluir
                       </ConfirmSubmit>
@@ -125,7 +102,6 @@ export default async function Page({
                   </td>
                 </tr>
               ))}
-
               {unidades.length === 0 && (
                 <tr>
                   <td colSpan={3} className="text-center text-zinc-500 py-8">
