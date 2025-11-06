@@ -1,12 +1,13 @@
-// app/cadastros/unidades/page.tsx
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 export const revalidate = 0;
-export const runtime = 'nodejs';
+export const runtime = "nodejs";
 
-import { prisma } from '@/lib/prisma';
-import { getSupabaseServer } from '@/lib/supabaseServer';
-import { redirect } from 'next/navigation';
-import { criarUnidade, excluirUnidade } from '@/actions/unidades';
+import { prisma } from "@/lib/prisma";
+import { getSupabaseServer } from "@/lib/supabaseServer";
+import { redirect } from "next/navigation";
+import { criarUnidade, excluirUnidade } from "@/actions/unidades";
+import ConfirmSubmit from "@/components/ConfirmSubmit";
+import { PendingFieldset, SubmitButton, PendingOverlay } from "@/components/FormPending";
 
 export default async function Page({
   searchParams,
@@ -14,131 +15,165 @@ export default async function Page({
   // auth + perfil
   const supabase = await getSupabaseServer();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
+  if (!user) redirect("/login");
 
   const me = await prisma.usuario.findUnique({
     where: { supabaseUserId: user.id },
     select: { id: true },
   });
-  if (!me) redirect('/login');
+  if (!me) redirect("/login");
+
+  // 👉 limpa URL “suja” de redirect do Next (evita travar o próximo submit)
+  if (searchParams?.e === "NEXT_REDIRECT") {
+    redirect("/cadastros/unidades");
+  }
 
   // carrega do meu usuário
   const unidades = await prisma.unidadeMedida.findMany({
     where: { usuarioId: me.id },
-    orderBy: { sigla: 'asc' },
+    orderBy: { sigla: "asc" },
   });
 
   // mensagens
   const rawErr = searchParams?.e ? decodeURIComponent(searchParams.e) : null;
-  const msgErro = rawErr && rawErr !== 'NEXT_REDIRECT' ? rawErr : null;
-  const ok = searchParams?.ok === '1';
+  const msgErro = rawErr && rawErr !== "NEXT_REDIRECT" ? rawErr : null;
+  const ok = searchParams?.ok === "1";
 
   return (
-    <main style={{ padding: 24, maxWidth: 880 }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700 }}>cadastros/unidades</h1>
+    <main className="max-w-[980px] mr-auto ml-6 p-6 grid gap-5">
+      <h1 className="text-2xl font-semibold text-zinc-900">
+        cadastros<span className="text-zinc-400">/</span>unidades
+      </h1>
 
       {/* avisos */}
       {msgErro && (
-        <div style={{
-          marginTop: 12, padding: '10px 12px',
-          border: '1px solid #f1d0d0', background: '#ffeaea',
-          color: '#7a0000', borderRadius: 8
-        }}>
+        <div className="rounded-xl border border-rose-200 bg-rose-50 text-rose-800 px-3 py-2 text-sm">
           {msgErro}
         </div>
       )}
       {ok && (
-        <div style={{
-          marginTop: 12, padding: '10px 12px',
-          border: '1px solid #d9f0d0', background: '#f3fff0',
-          color: '#235c00', borderRadius: 8
-        }}>
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-800 px-3 py-2 text-sm">
           Salvo com sucesso.
         </div>
       )}
 
-      {/* Form criar/editar (upsert pela sigla dentro do usuário) */}
-      <form
-        action={criarUnidade}
-        style={{
-          marginTop: 16,
-          display: 'grid',
-          gap: 8,
-          gridTemplateColumns: '160px 1fr auto',
-          alignItems: 'center',
-        }}
-      >
-        <input
-          name="sigla"
-          placeholder="Sigla (ex: m², m, cm, un, h)"
-          required
-          style={{ padding: '8px 10px', border: '1px solid #ddd', borderRadius: 8 }}
-        />
-        <input
-          name="nome"
-          placeholder="Nome (ex: Metro quadrado)"
-          required
-          style={{ padding: '8px 10px', border: '1px solid #ddd', borderRadius: 8 }}
-        />
-        <button
-          type="submit"
-          style={{
-            padding: '8px 14px',
-            borderRadius: 8,
-            background: '#111',
-            color: '#fff',
-            border: '1px solid #111',
-            cursor: 'pointer',
-          }}
-        >
-          Salvar
-        </button>
-      </form>
+      {/* Card criar/atualizar (upsert pela sigla) */}
+      <section className="card relative">
+        <div className="card-head mb-2">
+          <h2>Nova unidade</h2>
+        </div>
+
+        <form action={criarUnidade} className="grid gap-2 items-center grid-cols-[220px_1fr_auto]">
+          <PendingOverlay />
+
+          <PendingFieldset>
+            <input type="hidden" name="usuarioId" value={me.id} />
+
+            <input
+              name="sigla"
+              placeholder="Sigla (ex: m², m, cm, un, h)"
+              required
+              className="input"
+            />
+            <input
+              name="nome"
+              placeholder="Nome (ex: Metro quadrado)"
+              required
+              className="input"
+            />
+
+            <SubmitButton className="btn btn-primary">Salvar</SubmitButton>
+          </PendingFieldset>
+        </form>
+      </section>
 
       {/* Tabela */}
-      <table style={{ width: '100%', marginTop: 18, borderCollapse: 'collapse' }}>
-        <thead>
-          <tr style={{ background: '#f6f6f6' }}>
-            <th style={{ textAlign: 'left', padding: 8, width: 160 }}>Sigla</th>
-            <th style={{ textAlign: 'left', padding: 8 }}>Nome</th>
-            <th style={{ textAlign: 'left', padding: 8, width: 120 }}>Ações</th>
-          </tr>
-        </thead>
-        <tbody>
-          {unidades.map((u) => (
-            <tr key={u.id} style={{ borderTop: '1px solid #eee' }}>
-              <td style={{ padding: 8 }}>{u.sigla}</td>
-              <td style={{ padding: 8 }}>{u.nome}</td>
-              <td style={{ padding: 8 }}>
-                <form
-                  action={async () => {
-                    'use server';
-                    await excluirUnidade(u.id);
-                  }}
-                >
-                  <button
-                    type="submit"
-                    style={{
-                      padding: '6px 10px',
-                      borderRadius: 8,
-                      background: '#fff',
-                      border: '1px solid #ddd',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    Excluir
-                  </button>
-                </form>
-              </td>
-            </tr>
-          ))}
-          {unidades.length === 0 && (
-            <tr><td colSpan={3} style={{ padding: 12, color: '#666' }}>Nenhuma unidade cadastrada.</td></tr>
-          )}
-        </tbody>
-      </table>
+      <section className="card p-0 overflow-hidden">
+        <div className="table-wrap">
+          <table className="table w-full">
+            <colgroup>
+              <col style={{ width: "160px" }} /> {/* Sigla */}
+              <col />                              {/* Nome */}
+              <col style={{ width: "110px" }} />  {/* Ações */}
+            </colgroup>
 
-      <p style={{ marginTop: 10, color: '#666', fontSize: 12 }}>
+            <thead>
+              <tr>
+                {["Sigla", "Nome", "Ações"].map((h) => (
+                  <th key={h}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+
+            <tbody>
+              {unidades.map((u) => (
+                <tr key={u.id}>
+                  <td className="font-medium text-zinc-900">{u.sigla}</td>
+                  <td className="break-words">{u.nome}</td>
+                  <td className="text-right whitespace-nowrap">
+                    <form
+                      action={async () => {
+                        "use server";
+                        await excluirUnidade(u.id);
+                      }}
+                      className="inline-block"
+                    >
+                      <ConfirmSubmit className="btn btn-danger btn-sm" message="Excluir esta unidade?">
+                        Excluir
+                      </ConfirmSubmit>
+                    </form>
+                  </td>
+                </tr>
+              ))}
+
+              {unidades.length === 0 && (
+                <tr>
+                  <td colSpan={3} className="text-center text-zinc-500 py-8">
+                    Nenhuma unidade cadastrada.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <style>{`
+          :root{
+            --bg:#fff; --border:#e6e7eb; --muted:#f7f7fb;
+            --text:#0a0a0a; --subtext:#6b7280;
+            --primary:#0f172a; --primary-hover:#0b1222;
+            --accent:#2563eb; --ring:rgba(37,99,235,.25);
+            --danger-bg:#fff1f2; --danger-text:#be123c;
+          }
+          .card{ background:var(--bg); border:1px solid var(--border); border-radius:12px; padding:12px; box-shadow:0 1px 2px rgba(16,24,40,.04); }
+          .card-head h2{ margin:0; font-size:.95rem; font-weight:600; color:var(--text); }
+
+          .input{ height:36px; padding:0 10px; border:1px solid var(--border); border-radius:10px; outline:none; background:#fff; font-size:.95rem; }
+          .input:focus{ border-color:var(--accent); box-shadow:0 0 0 3px var(--ring); }
+
+          .btn{ display:inline-flex; align-items:center; justify-content:center; border:1px solid var(--border); border-radius:9999px; padding:0 12px; height:36px; font-weight:500; background:#f9fafb; color:var(--text); cursor:pointer; transition:.15s; font-size:.95rem; }
+          .btn:hover{ background:#f3f4f6; }
+          .btn-sm{ height:30px; padding:0 10px; font-size:.85rem; }
+          .btn-primary{ background:var(--primary); border-color:var(--primary); color:#fff; }
+          .btn-primary:hover{ background:var(--primary-hover); }
+          .btn-danger{ background:var(--danger-bg); color:var(--danger-text); border-color:#fecdd3; }
+          .btn-danger:hover{ background:#ffe4e6; }
+
+          .table-wrap{ overflow-x:hidden; }
+          .table{ border-collapse:collapse; table-layout:fixed; width:100%; font-size:.95rem; }
+          .table thead th{
+            background:#f8fafc; color:var(--subtext); text-align:left; font-weight:600; font-size:.85rem;
+            padding:10px 12px; border-bottom:1px solid var(--border);
+          }
+          .table tbody td{
+            padding:10px 12px; border-bottom:1px solid var(--border); vertical-align:middle; color:var(--text);
+            overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+          }
+          .table tbody tr:hover td{ background:#fafafa; }
+        `}</style>
+      </section>
+
+      <p className="text-xs text-zinc-500">
         Dica: use <b>sigla</b> como chave (é única por usuário). Repetir a sigla atualiza o nome.
       </p>
     </main>
