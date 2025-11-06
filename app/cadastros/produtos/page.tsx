@@ -78,6 +78,11 @@ export default async function Page({
   });
   if (!me) redirect("/login");
 
+  // limpar URL se vier com ?e=NEXT_REDIRECT
+if (searchParams?.e === "NEXT_REDIRECT") {
+  redirect("/cadastros/produtos");
+}
+
   const [unidades, produtos, vinculos] = await Promise.all([
     prisma.unidadeMedida.findMany({
       where: { usuarioId: me.id },
