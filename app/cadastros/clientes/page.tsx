@@ -1,397 +1,299 @@
-import React from 'react';
-import ConfirmSubmit from '@/components/ConfirmSubmit';
-import AutoCloseForm from '@/components/AutoCloseForm';
-import { prisma } from '@/lib/prisma';
-import { getSupabaseServer } from '@/lib/supabaseServer';
-import { redirect } from 'next/navigation';
+import React from "react";
+import ConfirmSubmit from "@/components/ConfirmSubmit";
+import AutoCloseForm from "@/components/AutoCloseForm";
+import { prisma } from "@/lib/prisma";
+import { getSupabaseServer } from "@/lib/supabaseServer";
+import { redirect } from "next/navigation";
 import {
   criarClienteUsuario,
   atualizarClienteUsuario,
   excluirClienteUsuario,
-} from '@/actions/clientes';
+} from "@/actions/clientes";
+import MaskedInput from "@/components/MaskedInput";
+import RenderWhenOpen from "@/components/RenderWhenOpen";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
-/* ===== helpers de exibição ===== */
-const digits = (s?: string | null) => (s ? s.replace(/\D+/g, '') : '');
+/* ===== helpers ===== */
+const digits = (s?: string | null) => (s ? s.replace(/\D+/g, "") : "");
 
-/** 000.000.000-00 (exibição do valor já salvo) */
 function formatCPF(v?: string | null) {
   const d = digits(v);
-  if (d.length !== 11) return v || '—';
-  return d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+  if (d.length !== 11) return v || "—";
+  return d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
 }
 
-/** 00.000.000/0000-00 (exibição do valor já salvo) */
 function formatCNPJ(v?: string | null) {
   const d = digits(v);
-  if (d.length !== 14) return v || '—';
-  return d.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
+  if (d.length !== 14) return v || "—";
+  return d.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
 }
 
-export default async function Page() {
-  // precisa estar logado
+type PageProps = { searchParams?: { p?: string } };
+
+export default async function Page({ searchParams }: PageProps) {
+  // auth
   const supabase = await getSupabaseServer();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
 
-  if (!user) redirect('/login');
-
-  // busca o registro do usuário interno (tabela Usuario)
   const me = await prisma.usuario.findUnique({
     where: { supabaseUserId: user.id },
     select: { id: true },
   });
+  if (!me) redirect("/login");
 
-  if (!me) redirect('/login');
+  // paginação server-side leve
+  const pageSize = 50;
+  const page = Math.max(1, Number(searchParams?.p ?? "1"));
+  const skip = (page - 1) * pageSize;
 
-  // Clientes só deste usuário
-  const clientes = await prisma.clienteUsuario.findMany({
-    where: { usuarioId: me.id },
-    orderBy: { nome: 'asc' },
-    select: {
-      id: true,
-      nome: true,
-      cpf: true,
-      cnpj: true,
-      email: true,
-      telefone: true,
-      endereco: true,
-      createdAt: true,
-      updatedAt: true,
-    },
-  });
+  const [total, clientes] = await Promise.all([
+    prisma.clienteUsuario.count({ where: { usuarioId: me.id } }),
+    prisma.clienteUsuario.findMany({
+      where: { usuarioId: me.id },
+      orderBy: { nome: "asc" },
+      select: {
+        id: true,
+        nome: true,
+        cpf: true,
+        cnpj: true,
+        email: true,
+        telefone: true,
+        endereco: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+      take: pageSize,
+      skip,
+    }),
+  ]);
+
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
-    <main
-      style={{
-        padding: 24,
-        display: 'grid',
-        gap: 16,
-        maxWidth: 1100,
-      }}
-    >
-      <h1 style={{ fontSize: 22, fontWeight: 700 }}>Cadastros / Clientes</h1>
+    <main className="max-w-5xl mx-auto p-6 grid gap-6">
+      <h1 className="text-2xl font-semibold">Cadastros / Clientes</h1>
 
       {/* criar */}
-      <section style={card}>
-        <h2 style={h2}>Novo cliente</h2>
+      <section className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
+        <h2 className="text-base font-medium mb-3">Novo cliente</h2>
 
         <form
           action={criarClienteUsuario}
-          style={{
-            display: 'grid',
-            gap: 8,
-            gridTemplateColumns: '2fr 1fr 1fr 1fr',
-            alignItems: 'center',
-          }}
+          className="grid gap-2 items-center md:grid-cols-4"
         >
-          {/* usuarioId oculto */}
           <input type="hidden" name="usuarioId" value={me.id} />
 
           <input
             name="nome"
             placeholder="Nome"
             required
-            style={{ ...input, gridColumn: '1 / span 1' }}
+            className="h-10 rounded-2xl border border-zinc-300 px-3 md:col-span-1"
           />
 
-          {/* >>> máscaras adicionadas via data-mask <<< */}
-          <input
+          <MaskedInput
             name="cpf"
             placeholder="CPF (opcional)"
             inputMode="numeric"
-            maxLength={14}              // 000.000.000-00
-            data-mask="cpf"
-            style={input}
+            maxLength={14}
+            mask="cpf"
+            className="h-10 rounded-2xl border border-zinc-300 px-3"
           />
-          <input
+
+          <MaskedInput
             name="cnpj"
             placeholder="CNPJ (opcional)"
             inputMode="numeric"
-            maxLength={18}              // 00.000.000/0000-00
-            data-mask="cnpj"
-            style={input}
+            maxLength={18}
+            mask="cnpj"
+            className="h-10 rounded-2xl border border-zinc-300 px-3"
           />
 
           <input
             name="email"
             placeholder="E-mail (opcional)"
-            style={{ ...input, gridColumn: '1 / span 1' }}
             type="email"
+            className="h-10 rounded-2xl border border-zinc-300 px-3 md:col-span-1"
           />
-          <input name="telefone" placeholder="Telefone (opcional)" style={input} />
+
+          <input
+            name="telefone"
+            placeholder="Telefone (opcional)"
+            className="h-10 rounded-2xl border border-zinc-300 px-3"
+          />
+
           <input
             name="endereco"
             placeholder="Endereço (opcional)"
-            style={{ ...input, gridColumn: '1 / span 2' }}
+            className="h-10 rounded-2xl border border-zinc-300 px-3 md:col-span-2"
           />
 
-          <div
-            style={{
-              gridColumn: '1 / span 4',
-              display: 'flex',
-              justifyContent: 'flex-end',
-            }}
-          >
-            <button style={btn}>Adicionar Novo</button>
+          <div className="md:col-span-4 flex justify-end pt-1">
+            <button
+              className="h-10 px-4 rounded-2xl border border-zinc-900 bg-zinc-900 text-white hover:opacity-90"
+            >
+              Adicionar Novo
+            </button>
           </div>
         </form>
       </section>
 
       {/* lista */}
-      <section>
-        <table
-          style={{
-            width: '100%',
-            borderCollapse: 'collapse',
-            background: '#fff',
-          }}
-        >
-          <thead>
+      <section className="rounded-2xl overflow-hidden border border-zinc-200 bg-white">
+        <table className="w-full border-collapse">
+          <thead className="bg-zinc-50">
             <tr>
-              <th style={th}>ID</th>
-              <th style={th}>Nome</th>
-              <th style={th}>CPF</th>
-              <th style={th}>CNPJ</th>
-              <th style={th}>E-mail</th>
-              <th style={th}>Telefone</th>
-              <th style={th}>Endereço</th>
-              <th style={th}></th>
+              {["ID","Nome","CPF","CNPJ","E-mail","Telefone","Endereço",""].map(h => (
+                <th key={h} className="text-left p-3 border-b border-zinc-200 font-semibold text-sm">{h}</th>
+              ))}
             </tr>
           </thead>
-
           <tbody>
-            {clientes.map((c) => (
-              <tr key={c.id}>
-                <td style={td}>{c.id}</td>
-                <td style={td}>{c.nome}</td>
-                <td style={td}>{formatCPF(c.cpf)}</td>
-                <td style={td}>{formatCNPJ(c.cnpj)}</td>
-                <td style={td}>{c.email ?? '—'}</td>
-                <td style={td}>{c.telefone ?? '—'}</td>
-                <td style={td}>{c.endereco ?? '—'}</td>
+            {clientes.map((c) => {
+              const detailsId = `det-${c.id}`;
+              return (
+                <tr key={c.id} className="align-top">
+                  <td className="p-3 border-b">{c.id}</td>
+                  <td className="p-3 border-b">{c.nome}</td>
+                  <td className="p-3 border-b">{formatCPF(c.cpf)}</td>
+                  <td className="p-3 border-b">{formatCNPJ(c.cnpj)}</td>
+                  <td className="p-3 border-b break-words">{c.email ?? "—"}</td>
+                  <td className="p-3 border-b">{c.telefone ?? "—"}</td>
+                  <td className="p-3 border-b break-words">{c.endereco ?? "—"}</td>
 
-                <td
-                  style={{
-                    ...td,
-                    whiteSpace: 'nowrap',
-                    textAlign: 'right',
-                  }}
-                >
-                  <details style={{ display: 'inline-block', marginRight: 8 }}>
-                    <summary style={linkBtn}>Editar</summary>
+                  <td className="p-3 border-b text-right whitespace-nowrap">
+                    <details id={detailsId} className="inline-block mr-2">
+                      <summary className="cursor-pointer inline-block px-3 py-1 rounded-2xl border bg-zinc-100 hover:bg-zinc-200 text-sm">
+                        Editar
+                      </summary>
 
-                    <div style={{ paddingTop: 8 }}>
-                      <AutoCloseForm
-                        id={`edit-${c.id}`}
-                        action={atualizarClienteUsuario}
-                        style={{
-                          display: 'grid',
-                          gap: 8,
-                          gridTemplateColumns: '2fr 1fr 1fr 1fr',
-                          maxWidth: 900,
-                        }}
+                      <div className="pt-2">
+                        {/* Só monta quando abrir */}
+                        <RenderWhenOpen detailsId={detailsId}>
+                          <AutoCloseForm
+                            id={`edit-${c.id}`}
+                            action={atualizarClienteUsuario}
+                            className="grid gap-2 md:grid-cols-4 max-w-3xl"
+                          >
+                            <input type="hidden" name="id" value={c.id} />
+
+                            <input
+                              name="nome"
+                              defaultValue={c.nome}
+                              required
+                              className="h-10 rounded-2xl border border-zinc-300 px-3"
+                            />
+
+                            <MaskedInput
+                              name="cpf"
+                              defaultValue={c.cpf ?? ""}
+                              placeholder="CPF"
+                              inputMode="numeric"
+                              maxLength={14}
+                              mask="cpf"
+                              className="h-10 rounded-2xl border border-zinc-300 px-3"
+                            />
+
+                            <MaskedInput
+                              name="cnpj"
+                              defaultValue={c.cnpj ?? ""}
+                              placeholder="CNPJ"
+                              inputMode="numeric"
+                              maxLength={18}
+                              mask="cnpj"
+                              className="h-10 rounded-2xl border border-zinc-300 px-3"
+                            />
+
+                            <input
+                              name="email"
+                              defaultValue={c.email ?? ""}
+                              placeholder="E-mail"
+                              type="email"
+                              className="h-10 rounded-2xl border border-zinc-300 px-3"
+                            />
+
+                            <input
+                              name="telefone"
+                              defaultValue={c.telefone ?? ""}
+                              placeholder="Telefone"
+                              className="h-10 rounded-2xl border border-zinc-300 px-3"
+                            />
+
+                            <input
+                              name="endereco"
+                              defaultValue={c.endereco ?? ""}
+                              placeholder="Endereço"
+                              className="h-10 rounded-2xl border border-zinc-300 px-3 md:col-span-3"
+                            />
+                          </AutoCloseForm>
+                        </RenderWhenOpen>
+                      </div>
+                    </details>
+
+                    <button
+                      type="submit"
+                      form={`edit-${c.id}`}
+                      className="hidden ml-2 h-8 px-3 rounded-2xl border border-zinc-900 bg-zinc-900 text-white text-sm save-btn"
+                    >
+                      Salvar
+                    </button>
+
+                    <form action={excluirClienteUsuario} className="inline ml-2">
+                      <input type="hidden" name="id" value={c.id} />
+                      <ConfirmSubmit
+                        className="h-8 px-3 rounded-2xl border border-rose-200 bg-rose-50 text-rose-700 text-sm"
+                        message="Excluir este cliente?"
                       >
-                        <input type="hidden" name="id" value={c.id} />
-                        <input name="nome" defaultValue={c.nome} required style={input} />
-                        <input
-                          name="cpf"
-                          defaultValue={c.cpf ?? ''}
-                          placeholder="CPF"
-                          inputMode="numeric"
-                          maxLength={14}
-                          data-mask="cpf"
-                          style={input}
-                        />
-                        <input
-                          name="cnpj"
-                          defaultValue={c.cnpj ?? ''}
-                          placeholder="CNPJ"
-                          inputMode="numeric"
-                          maxLength={18}
-                          data-mask="cnpj"
-                          style={input}
-                        />
-                        <input
-                          name="email"
-                          defaultValue={c.email ?? ''}
-                          placeholder="E-mail"
-                          style={input}
-                          type="email"
-                        />
-                        <input
-                          name="telefone"
-                          defaultValue={c.telefone ?? ''}
-                          placeholder="Telefone"
-                          style={input}
-                        />
-                        <input
-                          name="endereco"
-                          defaultValue={c.endereco ?? ''}
-                          placeholder="Endereço"
-                          style={{ ...input, gridColumn: '1 / span 3' }}
-                        />
-                      </AutoCloseForm>
-                    </div>
-                  </details>
-
-                  <button
-                    type="submit"
-                    form={`edit-${c.id}`}
-                    className="save-btn"
-                    style={primaryBtn}
-                  >
-                    Salvar
-                  </button>
-
-                  <form
-                    action={excluirClienteUsuario}
-                    style={{ display: 'inline', marginLeft: 8 }}
-                  >
-                    <input type="hidden" name="id" value={c.id} />
-                    <ConfirmSubmit style={dangerBtn} message="Excluir este cliente?">
-                      Excluir
-                    </ConfirmSubmit>
-                  </form>
-                </td>
-              </tr>
-            ))}
+                        Excluir
+                      </ConfirmSubmit>
+                    </form>
+                  </td>
+                </tr>
+              );
+            })}
 
             {clientes.length === 0 && (
               <tr>
-                <td style={td} colSpan={8}>
+                <td className="p-4 text-center text-zinc-600" colSpan={8}>
                   Nenhum cliente cadastrado.
                 </td>
               </tr>
             )}
           </tbody>
         </table>
+
+        {/* CSS mínimo para mostrar o botão Salvar quando details abrir */}
+        <style>{`
+          td .save-btn { display: none; }
+          td details[open] + .save-btn { display: inline-block; }
+        `}</style>
       </section>
 
-      {/* CSS embutido */}
-      <style>{`
-        td .save-btn {
-          display: none;
-          margin-left: 6px;
-        }
-        td details[open] + .save-btn {
-          display: inline-block;
-        }
-      `}</style>
-
-      {/* Script de máscara (aplica em inputs com data-mask="cpf|cnpj") */}
-      <script
-        dangerouslySetInnerHTML={{
-          __html: `
-          (function(){
-            function maskCPF(v){
-              v = v.replace(/\\D/g,'').slice(0,11);
-              v = v.replace(/(\\d{3})(\\d)/, '$1.$2');
-              v = v.replace(/(\\d{3})(\\d)/, '$1.$2');
-              v = v.replace(/(\\d{3})(\\d{1,2})$/, '$1-$2');
-              return v;
-            }
-            function maskCNPJ(v){
-              v = v.replace(/\\D/g,'').slice(0,14);
-              v = v.replace(/^(\\d{2})(\\d)/, '$1.$2');
-              v = v.replace(/^(\\d{2})\\.(\\d{3})(\\d)/, '$1.$2.$3');
-              v = v.replace(/\\.(\\d{3})(\\d)/, '.$1/$2');
-              v = v.replace(/(\\d{4})(\\d)/, '$1-$2');
-              return v;
-            }
-            function onMask(e){
-              var el = e.target;
-              if(!el || !el.getAttribute) return;
-              var type = el.getAttribute('data-mask');
-              if(!type) return;
-              var v = el.value || '';
-              el.value = type === 'cpf' ? maskCPF(v) : maskCNPJ(v);
-            }
-            document.addEventListener('input', onMask, true);
-          })();
-        `,
-        }}
-      />
+      {/* paginação */}
+      <nav className="flex items-center justify-end gap-2">
+        <span className="text-sm text-zinc-500">
+          {total} registro(s) • página {page} de {totalPages}
+        </span>
+        <a
+          href={`?p=${Math.max(1, page - 1)}`}
+          aria-disabled={page <= 1}
+          className={`h-9 px-3 rounded-2xl border text-sm ${
+            page <= 1 ? "pointer-events-none opacity-40" : "hover:bg-zinc-50"
+          }`}
+        >
+          Anterior
+        </a>
+        <a
+          href={`?p=${Math.min(totalPages, page + 1)}`}
+          aria-disabled={page >= totalPages}
+          className={`h-9 px-3 rounded-2xl border text-sm ${
+            page >= totalPages ? "pointer-events-none opacity-40" : "hover:bg-zinc-50"
+          }`}
+        >
+          Próxima
+        </a>
+      </nav>
     </main>
   );
 }
-
-/* estilos inline */
-const card: React.CSSProperties = {
-  padding: 12,
-  border: '1px solid #eee',
-  borderRadius: 8,
-  background: '#fff',
-};
-
-const h2: React.CSSProperties = {
-  fontSize: 16,
-  margin: '0 0 10px',
-};
-
-const th: React.CSSProperties = {
-  textAlign: 'left',
-  padding: 10,
-  borderBottom: '1px solid #eee',
-  background: '#fafafa',
-  fontWeight: 600,
-};
-
-const td: React.CSSProperties = {
-  padding: 10,
-  borderBottom: '1px solid #f2f2f2',
-  verticalAlign: 'top',
-  wordBreak: 'break-word',
-  overflowWrap: 'anywhere',
-};
-
-const input: React.CSSProperties = {
-  height: 36,
-  padding: '0 10px',
-  border: '1px solid #ddd',
-  borderRadius: 8,
-  outline: 'none',
-  width: '100%',
-  boxSizing: 'border-box',
-};
-
-const btn: React.CSSProperties = {
-  height: 36,
-  padding: '0 14px',
-  borderRadius: 8,
-  border: '1px solid #ddd', // ✅ corrigido aqui
-  background: '#111',
-  color: '#fff',
-  cursor: 'pointer',
-};
-
-const primaryBtn: React.CSSProperties = {
-  height: 30,
-  padding: '0 12px',
-  borderRadius: 8,
-  border: '1px solid #111',
-  background: '#111',
-  color: '#fff',
-  cursor: 'pointer',
-};
-
-const dangerBtn: React.CSSProperties = {
-  height: 30,
-  padding: '0 10px',
-  borderRadius: 8,
-  border: '1px solid #f1d0d0',
-  background: '#ffeaea',
-  color: '#b40000',
-  cursor: 'pointer',
-};
-
-const linkBtn: React.CSSProperties = {
-  cursor: 'pointer',
-  display: 'inline-block',
-  padding: '4px 10px',
-  borderRadius: 8,
-  border: '1px solid #ddd',
-  background: '#f8f8f8',
-};
