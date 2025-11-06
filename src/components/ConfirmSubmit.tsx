@@ -1,20 +1,27 @@
-// src/components/ConfirmSubmit.tsx
-'use client';
+"use client";
 
-import React from 'react';
+import React from "react";
 
-type Props = {
-  children: React.ReactNode;
-  style?: React.CSSProperties;
-  message?: string;
+type Props = React.ButtonHTMLAttributes<HTMLButtonElement> & {
+  message: string;
 };
 
-export default function ConfirmSubmit({ children, style, message = 'Excluir este item?' }: Props) {
+export default function ConfirmSubmit({
+  message,
+  children,
+  className,
+  style,
+  onClick,
+  ...rest
+}: Props) {
   return (
     <button
-      type="submit"
+      {...rest}
+      className={className}
       style={style}
       onClick={(e) => {
+        onClick?.(e);
+        if (e.defaultPrevented) return;
         if (!confirm(message)) e.preventDefault();
       }}
     >
