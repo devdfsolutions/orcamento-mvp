@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { authUser } from "@/lib/authUser";
+import { Prisma } from "@prisma/client";
 
 const PAGE = "/cadastros/fornecedores";
 
@@ -18,15 +19,19 @@ function backWithError(err: unknown) {
   redirect(`${PAGE}?e=${encodeURIComponent(msg)}`);
 }
 
+function normalizeDoc(raw: FormDataEntryValue | null): string | null {
+  const d = digits(raw);
+  return d.length ? d : null; // <<< evita "" (string vazia) e usa null
+}
+
 export async function criarFornecedor(formData: FormData) {
   try {
     const { id: usuarioId } = await authUser();
 
     const nome = String(formData.get("nome") ?? "").trim();
-    const cnpjCpf = digits(formData.get("cnpjCpf"));
-    const contato = (String(formData.get("contato") ?? "").trim() || null) as
-      | string
-      | null;
+    const cnpjCpf = normalizeDoc(formData.get("cnpjCpf"));
+    const contato =
+      (String(formData.get("contato") ?? "").trim() || null) as string | null;
 
     if (!nome) throw new Error("Informe o nome do fornecedor.");
 
@@ -37,7 +42,11 @@ export async function criarFornecedor(formData: FormData) {
     revalidatePath(PAGE);
     redirect(`${PAGE}?ok=1`);
   } catch (err) {
-    backWithError(err);
+    // trata UNIQUE
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      return backWithError("Já existe fornecedor com este CNPJ/CPF.");
+    }
+    return backWithError(err);
   }
 }
 
@@ -47,15 +56,14 @@ export async function atualizarFornecedor(formData: FormData) {
 
     const id = Number(formData.get("id"));
     const nome = String(formData.get("nome") ?? "").trim();
-    const cnpjCpf = digits(formData.get("cnpjCpf"));
-    const contato = (String(formData.get("contato") ?? "").trim() || null) as
-      | string
-      | null;
+    const cnpjCpf = normalizeDoc(formData.get("cnpjCpf"));
+    const contato =
+      (String(formData.get("contato") ?? "").trim() || null) as string | null;
 
     if (!id) throw new Error("ID inválido.");
     if (!nome) throw new Error("Informe o nome do fornecedor.");
 
-    // protege por usuário (não depende de unique composto)
+    // escopo por usuário + update
     await prisma.fornecedor.updateMany({
       where: { id, usuarioId },
       data: { nome, cnpjCpf, contato },
@@ -64,7 +72,10 @@ export async function atualizarFornecedor(formData: FormData) {
     revalidatePath(PAGE);
     redirect(`${PAGE}?ok=1`);
   } catch (err) {
-    backWithError(err);
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      return backWithError("Já existe fornecedor com este CNPJ/CPF.");
+    }
+    return backWithError(err);
   }
 }
 
@@ -82,6 +93,6 @@ export async function excluirFornecedor(formData: FormData) {
     revalidatePath(PAGE);
     redirect(`${PAGE}?ok=1`);
   } catch (err) {
-    backWithError(err);
+    return backWithError(err);
   }
 }
