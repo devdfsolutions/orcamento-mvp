@@ -6,14 +6,22 @@ type Props = {
   name: string;
   defaultValue?: string;
   placeholder?: string;
+  className?: string;
   style?: React.CSSProperties;
 };
 
 /**
- * Mostra CPF/CNPJ formatado no input visível, mas envia SÓ DÍGITOS
- * no campo hidden com o `name` verdadeiro.
+ * Input de CPF/CNPJ com máscara visual e campo hidden com apenas dígitos.
+ * - Visual padrão .input (igual aos demais campos)
+ * - Envia somente números no form
  */
-export default function DocInput({ name, defaultValue, placeholder, style }: Props) {
+export default function DocInput({
+  name,
+  defaultValue,
+  placeholder,
+  className = '',
+  style,
+}: Props) {
   const onlyDigits = (s: string) => s.replace(/\D+/g, '');
 
   const formatDoc = (digs: string) => {
@@ -38,14 +46,14 @@ export default function DocInput({ name, defaultValue, placeholder, style }: Pro
     const digs = onlyDigits(defaultValue ?? '');
     return formatDoc(digs);
   });
+
   const [hidden, setHidden] = React.useState(() => onlyDigits(defaultValue ?? ''));
 
   const onChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = onlyDigits(e.target.value);
     setVisible(formatDoc(raw));
+    setHidden(raw);
   };
-
-  const onBlur = () => setHidden(onlyDigits(visible));
 
   return (
     <>
@@ -55,7 +63,7 @@ export default function DocInput({ name, defaultValue, placeholder, style }: Pro
         placeholder={placeholder ?? 'CNPJ/CPF'}
         value={visible}
         onChange={onChange}
-        onBlur={onBlur}
+        className={`input ${className}`}
         style={style}
       />
       <input type="hidden" name={name} value={hidden} />
