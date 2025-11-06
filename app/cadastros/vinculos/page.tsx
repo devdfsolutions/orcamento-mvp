@@ -5,6 +5,8 @@ import { getSupabaseServer } from '@/lib/supabaseServer';
 import { redirect } from 'next/navigation';
 import { upsertVinculo, excluirVinculo } from '@/actions/vinculos';
 import InlineVinculoRow from '@/components/InlineVinculoRow';
+import CleanRedirectParam from '@/components/CleanRedirectParam';
+import FormPending from '@/components/FormPending';
 
 export const dynamic = 'force-dynamic';
 
@@ -53,6 +55,9 @@ export default async function Page({
 
   return (
     <main style={{ padding: 24, display: 'grid', gap: 16, maxWidth: 1200, margin: '0 auto' }}>
+      {/* limpa ?e=NEXT_REDIRECT da URL no client */}
+      <CleanRedirectParam paramKey="e" badValue="NEXT_REDIRECT" />
+
       <h1 style={{ fontSize: 22, fontWeight: 700 }}>
         Cadastros / Vínculos Fornecedor ↔ Produto
       </h1>
@@ -69,11 +74,11 @@ export default async function Page({
         </div>
       )}
 
-      {/* Novo/Atualizar vínculo (upsert) */}
+      {/* Novo/Atualizar vínculo (upsert) com loader */}
       <section style={card}>
         <h2 style={h2}>Criar/Atualizar vínculo (upsert)</h2>
 
-        <form action={upsertVinculo} style={{ display: 'grid', gap: 12 }}>
+        <FormPending action={upsertVinculo} submitText="Salvar" submittingText="Salvando...">
           {/* Linha 1 — Seleções */}
           <div style={{ display: 'grid', gap: 8, gridTemplateColumns: '1.1fr 1.1fr 0.9fr 1.4fr' }}>
             <select name="fornecedorId" defaultValue="" required style={select}>
@@ -118,11 +123,7 @@ export default async function Page({
               </div>
             </fieldset>
           </div>
-
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <button type="submit" style={btn}>Salvar</button>
-          </div>
-        </form>
+        </FormPending>
 
         <p style={{ marginTop: 6, fontSize: 12, color: '#666' }}>
           Dica: selecione o mesmo fornecedor+produto e preencha novos valores para atualizar (upsert).
@@ -247,12 +248,3 @@ const input: React.CSSProperties = {
   boxSizing: 'border-box',
 };
 const select: React.CSSProperties = { ...input, height: 36 };
-const btn: React.CSSProperties = {
-  height: 36,
-  padding: '0 14px',
-  borderRadius: 8,
-  border: '1px solid #ddd',
-  background: '#111',
-  color: '#fff',
-  cursor: 'pointer',
-};
