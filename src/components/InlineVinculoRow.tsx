@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import ConfirmDelete from '@/components/ConfirmDelete';
 
 /** Props compatíveis com prisma.fornecedorProduto + includes usados na page */
 type Vinculo = {
@@ -17,7 +18,7 @@ type Vinculo = {
   precoMoM2: number | null;
   precoMoM3: number | null;
   // datas/obs
-  dataUltAtual: string | Date | null;   // << ALINHADO COM SEU MODELO
+  dataUltAtual: string | Date | null;
   observacao: string | null;
 };
 
@@ -27,7 +28,7 @@ type Props = {
   onDelete: (formData: FormData) => Promise<void>; // server action excluirVinculo
 };
 
-/* ===== helpers (client) ===== */
+/* ===== helpers ===== */
 const moneyShort = (v: any) => {
   if (v == null) return '—';
   const n = Number(v);
@@ -109,13 +110,13 @@ export default function InlineVinculoRow({ v, onSubmit, onDelete }: Props) {
   const [precoMatP1, setPrecoMatP1] = React.useState<string>(parseEditable(v.precoMatP1));
   const [precoMatP2, setPrecoMatP2] = React.useState<string>(parseEditable(v.precoMatP2));
   const [precoMatP3, setPrecoMatP3] = React.useState<string>(parseEditable(v.precoMatP3));
-  const [precoMoM1, setPrecoMoM1]   = React.useState<string>(parseEditable(v.precoMoM1));
-  const [precoMoM2, setPrecoMoM2]   = React.useState<string>(parseEditable(v.precoMoM2));
-  const [precoMoM3, setPrecoMoM3]   = React.useState<string>(parseEditable(v.precoMoM3));
+  const [precoMoM1, setPrecoMoM1] = React.useState<string>(parseEditable(v.precoMoM1));
+  const [precoMoM2, setPrecoMoM2] = React.useState<string>(parseEditable(v.precoMoM2));
+  const [precoMoM3, setPrecoMoM3] = React.useState<string>(parseEditable(v.precoMoM3));
   const [dataUltAtual, setDataUltAtual] = React.useState<string>(fmtDateBR(v.dataUltAtual));
   const [observacao, setObservacao] = React.useState<string>(v.observacao ?? '');
 
-  // restaura os valores originais ao cancelar
+  // restaura originais ao cancelar
   const handleCancel = () => {
     setPrecoMatP1(parseEditable(v.precoMatP1));
     setPrecoMatP2(parseEditable(v.precoMatP2));
@@ -128,41 +129,31 @@ export default function InlineVinculoRow({ v, onSubmit, onDelete }: Props) {
     setEdit(false);
   };
 
-  // submit inline (gera FormData compatível com upsertVinculo)
+  // submit inline
   const handleSave = async () => {
     const fd = new FormData();
     fd.set('fornecedorId', String(v.fornecedorId));
     fd.set('produtoId', String(v.produtoId));
 
-    // campos numéricos (permite vazio => limpa)
     fd.set('precoMatP1', precoMatP1);
     fd.set('precoMatP2', precoMatP2);
     fd.set('precoMatP3', precoMatP3);
-    fd.set('precoMoM1',  precoMoM1);
-    fd.set('precoMoM2',  precoMoM2);
-    fd.set('precoMoM3',  precoMoM3);
+    fd.set('precoMoM1', precoMoM1);
+    fd.set('precoMoM2', precoMoM2);
+    fd.set('precoMoM3', precoMoM3);
 
-    // data/obs
     if (dataUltAtual) fd.set('dataUltAtual', dataUltAtual);
-    if (observacao)   fd.set('observacao', observacao);
+    if (observacao) fd.set('observacao', observacao);
 
     await onSubmit(fd);
     setEdit(false);
-  };
-
-  const handleDelete = async () => {
-    const fd = new FormData();
-    fd.set('id', String(v.id));
-    await onDelete(fd);
   };
 
   return (
     <tr>
       <td style={cell}>{v.produto?.nome}</td>
       <td style={cell}>{v.fornecedor?.nome}</td>
-      <td style={{ ...cell, textAlign: 'center' }}>
-        {v.produto?.unidade?.sigla ?? '—'}
-      </td>
+      <td style={{ ...cell, textAlign: 'center' }}>{v.produto?.unidade?.sigla ?? '—'}</td>
 
       {/* P1 - P3 */}
       <td style={numCell}>
@@ -256,7 +247,7 @@ export default function InlineVinculoRow({ v, onSubmit, onDelete }: Props) {
             placeholder="DD/MM/AAAA"
           />
         ) : (
-          (fmtDateBR(v.dataUltAtual) || '—')
+          fmtDateBR(v.dataUltAtual) || '—'
         )}
       </td>
       <td style={cell}>
@@ -279,9 +270,13 @@ export default function InlineVinculoRow({ v, onSubmit, onDelete }: Props) {
             <button style={actionBtn} onClick={() => setEdit(true)}>
               Editar
             </button>
-            <button style={{ ...dangerBtn, marginLeft: 8 }} onClick={handleDelete}>
-              Excluir
-            </button>
+
+            <ConfirmDelete
+              id={v.id}
+              label={`${v.produto?.nome ?? 'Produto'} — ${v.fornecedor?.nome ?? 'Fornecedor'}`}
+              onDelete={onDelete}
+              style={{ ...dangerBtn, marginLeft: 8 }}
+            />
           </>
         ) : (
           <>
