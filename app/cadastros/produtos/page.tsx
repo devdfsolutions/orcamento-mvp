@@ -1,23 +1,33 @@
 // ===== Config de runtime =====
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-import { prisma } from '@/lib/prisma';
-import { getSupabaseServer } from '@/lib/supabaseServer';
-import { redirect } from 'next/navigation';
-import AutoCloseForm from '@/components/AutoCloseForm';
-import ConfirmSubmit from '@/components/ConfirmSubmit';
-import { criarProduto, atualizarProduto, excluirProduto } from '@/actions/produtos';
+import { prisma } from "@/lib/prisma";
+import { getSupabaseServer } from "@/lib/supabaseServer";
+import { redirect } from "next/navigation";
+import AutoCloseForm from "@/components/AutoCloseForm";
+import ConfirmSubmit from "@/components/ConfirmSubmit";
+import ToggleRowEditing from "@/components/ToggleRowEditing";
+import {
+  criarProduto,
+  atualizarProduto,
+  excluirProduto,
+} from "@/actions/produtos";
+import {
+  PendingFieldset,
+  PendingOverlay,
+  SubmitButton,
+} from "@/components/FormPending";
 
 /* ===== Helpers ===== */
 function money(v: any) {
   const n = Number(v);
-  if (!Number.isFinite(n)) return '—';
-  return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  if (!Number.isFinite(n)) return "—";
+  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 const tipoLabel = (t?: string | null) =>
-  t === 'PRODUTO' ? 'Produto' : t === 'SERVICO' ? 'Serviço' : 'Ambos';
+  t === "PRODUTO" ? "Produto" : t === "SERVICO" ? "Serviço" : "Ambos";
 
 type VincForn = {
   produtoId: number;
@@ -32,11 +42,11 @@ type VincForn = {
 
 function pickMinMaxByTipo(
   vincs: VincForn[],
-  tipo: 'PRODUTO' | 'SERVICO' | 'AMBOS' | null | undefined
+  tipo: "PRODUTO" | "SERVICO" | "AMBOS" | null | undefined
 ) {
   let min: { preco: number; fornecedor: string } | undefined;
   let max: { preco: number; fornecedor: string } | undefined;
-  const useMO = tipo === 'SERVICO';
+  const useMO = tipo === "SERVICO";
 
   for (const v of vincs) {
     const cand = useMO
@@ -56,31 +66,27 @@ function pickMinMaxByTipo(
 /* ===== Página ===== */
 export default async function Page({
   searchParams,
-}: {
-  searchParams?: { e?: string; ok?: string };
-}) {
+}: { searchParams?: { e?: string; ok?: string } }) {
   // Auth + "me"
-  const supabase = await getSupabaseServer(); // <= faltava await
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
+  const supabase = await getSupabaseServer();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
 
   const me = await prisma.usuario.findUnique({
     where: { supabaseUserId: user.id },
     select: { id: true },
   });
-  if (!me) redirect('/login');
+  if (!me) redirect("/login");
 
   const [unidades, produtos, vinculos] = await Promise.all([
     prisma.unidadeMedida.findMany({
       where: { usuarioId: me.id },
-      orderBy: { sigla: 'asc' },
+      orderBy: { sigla: "asc" },
       select: { id: true, sigla: true, nome: true },
     }),
     prisma.produtoServico.findMany({
       where: { usuarioId: me.id },
-      orderBy: [{ nome: 'asc' }],
+      orderBy: [{ nome: "asc" }],
       select: {
         id: true,
         nome: true,
@@ -113,266 +119,223 @@ export default async function Page({
   }
 
   const rawErr = searchParams?.e ?? null;
-  const msgErro =
-    rawErr && rawErr !== 'NEXT_REDIRECT' ? decodeURIComponent(rawErr) : null;
-  const ok = searchParams?.ok === '1';
+  const msgErro = rawErr && rawErr !== "NEXT_REDIRECT" ? decodeURIComponent(rawErr) : null;
+  const ok = searchParams?.ok === "1";
 
   return (
-    <main style={{ padding: 24, display: 'grid', gap: 16, maxWidth: 1200, margin: '0 auto' }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700 }}>Cadastros / Produtos & Serviços</h1>
+    <main className="max-w-[1100px] mr-auto ml-6 p-6 grid gap-5">
+      <h1 className="text-2xl font-semibold text-zinc-900">
+        Cadastros <span className="text-zinc-400">/</span> Produtos & Serviços
+      </h1>
 
       {/* alertas */}
       {msgErro && (
-        <div
-          style={{
-            padding: '10px 12px',
-            border: '1px solid #f1d0d0',
-            background: '#ffeaea',
-            color: '#7a0000',
-            borderRadius: 8,
-          }}
-        >
+        <div className="rounded-xl border border-rose-200 bg-rose-50 text-rose-800 px-3 py-2 text-sm">
           {msgErro}
         </div>
       )}
       {ok && (
-        <div
-          style={{
-            padding: '10px 12px',
-            border: '1px solid #d9f0d0',
-            background: '#f3fff0',
-            color: '#235c00',
-            borderRadius: 8,
-          }}
-        >
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-800 px-3 py-2 text-sm">
           Salvo com sucesso.
         </div>
       )}
 
       {/* Novo produto/serviço */}
-      <section style={card}>
-        <h2 style={h2}>Novo produto/serviço</h2>
+      <section className="card relative">
+        <div className="card-head mb-2">
+          <h2>Novo produto/serviço</h2>
+        </div>
 
-        <form
-          action={criarProduto}
-          style={{ display: 'grid', gap: 8, gridTemplateColumns: '1fr 140px 160px 1fr' }}
-        >
-          <input name="nome" placeholder="Nome" required style={input} />
+        <form action={criarProduto} className="grid gap-2 grid-cols-[1fr_140px_180px_1fr_auto] items-center">
+          <PendingOverlay />
+          <PendingFieldset>
+            <input name="nome" placeholder="Nome" required className="input" />
 
-          <select name="tipo" defaultValue="AMBOS" required style={{ ...input, height: 36 }}>
-            <option value="PRODUTO">Produto</option>
-            <option value="SERVICO">Serviço</option>
-            <option value="AMBOS">Ambos</option>
-          </select>
+            <select name="tipo" defaultValue="AMBOS" required className="input">
+              <option value="PRODUTO">Produto</option>
+              <option value="SERVICO">Serviço</option>
+              <option value="AMBOS">Ambos</option>
+            </select>
 
-          <select name="unidadeMedidaId" defaultValue="" required style={{ ...input, height: 36 }}>
-            <option value="" disabled>
-              Selecione UM
-            </option>
-            {unidades.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.sigla} — {u.nome}
-              </option>
-            ))}
-          </select>
+            <select name="unidadeMedidaId" defaultValue="" required className="input">
+              <option value="" disabled>Selecione UM</option>
+              {unidades.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.sigla} — {u.nome}
+                </option>
+              ))}
+            </select>
 
-          <input name="categoria" placeholder="Categoria (opcional)" style={input} />
+            <input name="categoria" placeholder="Categoria (opcional)" className="input" />
 
-          <div style={{ gridColumn: '1 / span 4', display: 'flex', justifyContent: 'flex-end' }}>
-            <button type="submit" style={btn}>
-              Salvar
-            </button>
-          </div>
+            <SubmitButton className="btn btn-primary">Salvar</SubmitButton>
+          </PendingFieldset>
         </form>
       </section>
 
       {/* Lista */}
-      <section style={{ overflowX: 'auto' }}>
-        <table
-          style={{
-            width: '100%',
-            minWidth: 900,
-            borderCollapse: 'collapse',
-            background: '#fff',
-            tableLayout: 'auto',
-          }}
-        >
-          <thead>
-            <tr>
-              <th style={th}>ID</th>
-              <th style={th}>Nome</th>
-              <th style={th}>Tipo</th>
-              <th style={th}>UM</th>
-              <th style={th}>Categoria</th>
-              <th style={{ ...th, textAlign: 'right' }}>P1 (menor)</th>
-              <th style={th}>Fornecedor (P1)</th>
-              <th style={{ ...th, textAlign: 'right' }}>P3 (maior)</th>
-              <th style={th}>Fornecedor (P3)</th>
-              <th style={th}></th>
-            </tr>
-          </thead>
+      <section className="card p-0 overflow-hidden">
+        <div className="table-wrap">
+          <table className="table w-full">
+            <colgroup>
+              <col style={{ width: "60px" }} />   {/* ID */}
+              <col style={{ width: "26%" }} />    {/* Nome */}
+              <col style={{ width: "10%" }} />    {/* Tipo */}
+              <col style={{ width: "8%" }} />     {/* UM */}
+              <col style={{ width: "14%" }} />    {/* Categoria */}
+              <col style={{ width: "10%" }} />    {/* P1 */}
+              <col style={{ width: "18%" }} />    {/* Forn P1 */}
+              <col style={{ width: "10%" }} />    {/* P3 */}
+              <col style={{ width: "18%" }} />    {/* Forn P3 */}
+              <col style={{ width: "120px" }} />  {/* Ações */}
+            </colgroup>
 
-          <tbody>
-            {produtos.map((p) => {
-              const vincs = mapPorProduto.get(p.id) ?? [];
-              const { min, max } = pickMinMaxByTipo(vincs, (p.tipo as any) ?? 'AMBOS');
+            <thead>
+              <tr>
+                {["ID","Nome","Tipo","UM","Categoria","P1 (menor)","Fornecedor (P1)","P3 (maior)","Fornecedor (P3)","Ações"].map((h)=>(
+                  <th key={h}>{h}</th>
+                ))}
+              </tr>
+            </thead>
 
-              return (
-                <tr key={p.id}>
-                  <td style={td}>{p.id}</td>
-                  <td style={td}>{p.nome}</td>
-                  <td style={td}>{tipoLabel(p.tipo)}</td>
-                  <td style={td}>{p.unidade?.sigla}</td>
-                  <td style={td}>{p.categoria ?? '—'}</td>
+            <tbody>
+              {produtos.map((p) => {
+                const vincs = mapPorProduto.get(p.id) ?? [];
+                const { min, max } = pickMinMaxByTipo(vincs, (p.tipo as any) ?? "AMBOS");
+                const formId = `edit-${p.id}`;
+                const detailsId = `det-${p.id}`;
+                const rowId = `row-${p.id}`;
 
-                  <td style={{ ...td, textAlign: 'right' }}>{min ? money(min.preco) : '—'}</td>
-                  <td style={td}>{min?.fornecedor ?? '—'}</td>
-                  <td style={{ ...td, textAlign: 'right' }}>{max ? money(max.preco) : '—'}</td>
-                  <td style={td}>{max?.fornecedor ?? '—'}</td>
+                return (
+                  <tr key={p.id} id={rowId}>
+                    <td><span className="cell-view">{p.id}</span></td>
 
-                  <td style={{ ...td, whiteSpace: 'nowrap', textAlign: 'right' }}>
-                    <details style={{ display: 'inline-block', marginRight: 8 }}>
-                      <summary style={linkBtn}>Editar</summary>
-                      <div style={{ paddingTop: 8 }}>
-                        <AutoCloseForm
-                          id={`edit-${p.id}`}
-                          action={atualizarProduto}
-                          style={{
-                            display: 'grid',
-                            gap: 8,
-                            gridTemplateColumns: '1fr 140px 160px 1fr',
-                            maxWidth: 900,
-                          }}
-                        >
-                          <input type="hidden" name="id" value={p.id} />
-                          <input name="nome" defaultValue={p.nome} required style={input} />
-                          <select
-                            name="tipo"
-                            defaultValue={String(p.tipo ?? 'AMBOS')}
-                            required
-                            style={{ ...input, height: 36 }}
-                          >
-                            <option value="PRODUTO">Produto</option>
-                            <option value="SERVICO">Serviço</option>
-                            <option value="AMBOS">Ambos</option>
-                          </select>
-                          <select
-                            name="unidadeMedidaId"
-                            defaultValue={String(p.unidadeMedidaId)}
-                            required
-                            style={{ ...input, height: 36 }}
-                          >
-                            {unidades.map((u) => (
-                              <option key={u.id} value={u.id}>
-                                {u.sigla}
-                              </option>
-                            ))}
-                          </select>
-                          <input
-                            name="categoria"
-                            defaultValue={p.categoria ?? ''}
-                            placeholder="Categoria"
-                            style={input}
-                          />
-                        </AutoCloseForm>
-                      </div>
-                    </details>
+                    <td>
+                      <span className="cell-view font-medium text-zinc-900">{p.nome}</span>
+                      <input form={formId} name="nome" defaultValue={p.nome} required className="cell-edit input input-sm w-full" />
+                    </td>
 
-                    <button type="submit" form={`edit-${p.id}`} className="save-btn" style={primaryBtn}>
-                      Salvar
-                    </button>
+                    <td>
+                      <span className="cell-view">{tipoLabel(p.tipo)}</span>
+                      <select form={formId} name="tipo" defaultValue={String(p.tipo ?? "AMBOS")} required className="cell-edit input input-sm w-full">
+                        <option value="PRODUTO">Produto</option>
+                        <option value="SERVICO">Serviço</option>
+                        <option value="AMBOS">Ambos</option>
+                      </select>
+                    </td>
 
-                    <form action={excluirProduto} style={{ display: 'inline', marginLeft: 8 }}>
-                      <input type="hidden" name="id" value={p.id} />
-                      <ConfirmSubmit style={dangerBtn} message="Excluir este item?">
-                        Excluir
-                      </ConfirmSubmit>
-                    </form>
+                    <td>
+                      <span className="cell-view">{p.unidade?.sigla}</span>
+                      <select form={formId} name="unidadeMedidaId" defaultValue={String(p.unidadeMedidaId)} required className="cell-edit input input-sm w-full">
+                        {unidades.map((u)=>(
+                          <option key={u.id} value={u.id}>{u.sigla}</option>
+                        ))}
+                      </select>
+                    </td>
+
+                    <td>
+                      <span className="cell-view">{p.categoria ?? "—"}</span>
+                      <input form={formId} name="categoria" defaultValue={p.categoria ?? ""} placeholder="Categoria" className="cell-edit input input-sm w-full" />
+                    </td>
+
+                    {/* preços min/max */}
+                    <td className="text-right">{min ? money(min.preco) : "—"}</td>
+                    <td className="break-words">{min?.fornecedor ?? "—"}</td>
+                    <td className="text-right">{max ? money(max.preco) : "—"}</td>
+                    <td className="break-words">{max?.fornecedor ?? "—"}</td>
+
+                    <td className="text-right whitespace-nowrap">
+                      <details id={detailsId} className="inline-block mr-2 align-middle">
+                        <summary className="pill">Editar</summary>
+                      </details>
+
+                      <button type="submit" form={formId} className="btn btn-primary btn-sm save-btn align-middle">
+                        Salvar
+                      </button>
+
+                      <form action={excluirProduto} className="inline ml-2 align-middle">
+                        <input type="hidden" name="id" value={p.id} />
+                        <ConfirmSubmit className="btn btn-danger btn-sm" message="Excluir este item?">
+                          Excluir
+                        </ConfirmSubmit>
+                      </form>
+
+                      {/* form oculto para receber os inputs por 'form' */}
+                      <AutoCloseForm id={formId} action={atualizarProduto} className="hidden">
+                        <input type="hidden" name="id" value={p.id} />
+                      </AutoCloseForm>
+
+                      <ToggleRowEditing detailsId={detailsId} rowId={rowId} />
+                    </td>
+                  </tr>
+                );
+              })}
+
+              {produtos.length === 0 && (
+                <tr>
+                  <td colSpan={10} className="text-center text-zinc-500 py-8">
+                    Nenhum produto/serviço cadastrado.
                   </td>
                 </tr>
-              );
-            })}
-            {produtos.length === 0 && (
-              <tr>
-                <td style={td} colSpan={10}>
-                  Nenhum produto/serviço cadastrado.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </section>
+              )}
+            </tbody>
+          </table>
+        </div>
 
-      <style>{`
-        td .save-btn { display: none; margin-left: 6px; }
-        td details[open] + .save-btn { display: inline-block; }
-        .ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      `}</style>
+        {/* estilos locais (tokens + tabela compacta + inline edit) */}
+        <style>{`
+          :root{
+            --bg:#fff; --border:#e6e7eb; --muted:#f7f7fb;
+            --text:#0a0a0a; --subtext:#6b7280;
+            --primary:#0f172a; --primary-hover:#0b1222;
+            --accent:#2563eb; --ring:rgba(37,99,235,.25);
+            --danger-bg:#fff1f2; --danger-text:#be123c;
+          }
+          .card{ background:var(--bg); border:1px solid var(--border); border-radius:12px; padding:12px; box-shadow:0 1px 2px rgba(16,24,40,.04); }
+          .card-head h2{ margin:0; font-size:.95rem; font-weight:600; color:var(--text); }
+
+          .input{ height:36px; padding:0 10px; border:1px solid var(--border); border-radius:10px; outline:none; background:#fff; font-size:.95rem; }
+          .input:focus{ border-color:var(--accent); box-shadow:0 0 0 3px var(--ring); }
+          .input-sm{ height:30px; padding:0 8px; font-size:.9rem; }
+
+          .btn{ display:inline-flex; align-items:center; justify-content:center; border:1px solid var(--border); border-radius:9999px; padding:0 12px; height:36px; font-weight:500; background:#f9fafb; color:var(--text); cursor:pointer; transition:.15s; font-size:.95rem; }
+          .btn:hover{ background:#f3f4f6; }
+          .btn-sm{ height:30px; padding:0 10px; font-size:.85rem; }
+          .btn-primary{ background:var(--primary); border-color:var(--primary); color:#fff; }
+          .btn-primary:hover{ background:var(--primary-hover); }
+          .btn-danger{ background:var(--danger-bg); color:var(--danger-text); border-color:#fecdd3; }
+          .btn-danger:hover{ background:#ffe4e6; }
+
+          details>summary::-webkit-details-marker{ display:none; }
+          details>summary{ list-style:none; }
+          .pill{ display:inline-block; padding:5px 10px; border-radius:9999px; border:1px solid var(--border); background:var(--muted); color:var(--text); cursor:pointer; font-size:.85rem; }
+          .pill:hover{ background:#eef2ff; border-color:#dfe3f1; }
+
+          .table-wrap{ overflow-x:hidden; }
+          .table{ border-collapse:collapse; table-layout:fixed; width:100%; font-size:.95rem; }
+          .table thead th{
+            background:#f8fafc; color:var(--subtext); text-align:left; font-weight:600; font-size:.85rem;
+            padding:10px 12px; border-bottom:1px solid var(--border);
+          }
+          .table tbody td{
+            padding:10px 12px; border-bottom:1px solid var(--border); vertical-align:middle; color:var(--text);
+            overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+          }
+          .table tbody tr:hover td{ background:#fafafa; }
+
+          /* inline edit */
+          .cell-edit{ display:none; }
+          tr.editing .cell-view{ display:none; }
+          tr.editing .cell-edit{ display:block; }
+          td .save-btn{ display:none; }
+          tr.editing td .save-btn{ display:inline-flex; }
+
+          /* inputs não estouram a célula */
+          .table input, .table select{
+            width:100%; max-width:100%; min-width:0; box-sizing:border-box;
+          }
+        `}</style>
+      </section>
     </main>
   );
 }
-
-/* ===== Estilos ===== */
-const card: React.CSSProperties = {
-  padding: 12,
-  border: '1px solid #eee',
-  borderRadius: 8,
-  background: '#fff',
-};
-const h2: React.CSSProperties = { fontSize: 16, margin: '0 0 10px' };
-const th: React.CSSProperties = {
-  textAlign: 'left',
-  padding: 10,
-  borderBottom: '1px solid #eee',
-  background: '#fafafa',
-  fontWeight: 600,
-};
-const td: React.CSSProperties = {
-  padding: 10,
-  borderBottom: '1px solid #f2f2f2',
-  verticalAlign: 'top',
-};
-const input: React.CSSProperties = {
-  height: 36,
-  padding: '0 10px',
-  border: '1px solid #ddd',
-  borderRadius: 8,
-  outline: 'none',
-  width: '100%',
-  boxSizing: 'border-box',
-};
-const btn: React.CSSProperties = {
-  height: 36,
-  padding: '0 14px',
-  borderRadius: 8,
-  border: '1px solid #ddd',
-  background: '#111',
-  color: '#fff',
-  cursor: 'pointer',
-};
-const primaryBtn: React.CSSProperties = {
-  height: 30,
-  padding: '0 12px',
-  borderRadius: 8,
-  border: '1px solid #111',
-  background: '#111',
-  color: '#fff',
-  cursor: 'pointer',
-};
-const dangerBtn: React.CSSProperties = {
-  height: 30,
-  padding: '0 10px',
-  borderRadius: 8,
-  border: '1px solid #f1d0d0',
-  background: '#ffeaea',
-  color: '#b40000',
-  cursor: 'pointer',
-};
-const linkBtn: React.CSSProperties = {
-  cursor: 'pointer',
-  display: 'inline-block',
-  padding: '4px 10px',
-  borderRadius: 8,
-  border: '1px solid #ddd',
-  background: '#f8f8f8',
-};
