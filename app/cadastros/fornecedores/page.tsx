@@ -18,12 +18,11 @@ import {
   SubmitButton,
 } from "@/components/FormPending";
 
-/* máscara de exibição */
 function docMask(v?: string | null) {
   if (!v) return "—";
   const d = String(v).replace(/\D+/g, "");
-  if (d.length === 11) return d.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, "$1.$2.$3-$4"); // CPF
-  if (d.length === 14) return d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5"); // CNPJ
+  if (d.length === 11) return d.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, "$1.$2.$3-$4");
+  if (d.length === 14) return d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5");
   return v;
 }
 
@@ -33,7 +32,7 @@ export default async function Page({
   const me = await getAuthUser(true);
   if (!me) redirect("/login");
 
-  // limpa URL suja do Next
+  // limpa URL se vier com NEXT_REDIRECT
   if (searchParams?.e === "NEXT_REDIRECT") {
     redirect("/cadastros/fornecedores");
   }
@@ -45,7 +44,8 @@ export default async function Page({
   });
 
   const rawErr = searchParams?.e ?? null;
-  const msgErro = rawErr && rawErr !== "NEXT_REDIRECT" ? decodeURIComponent(rawErr) : null;
+  const msgErro =
+    rawErr && rawErr !== "NEXT_REDIRECT" ? decodeURIComponent(rawErr) : null;
   const ok = searchParams?.ok === "1";
 
   return (
@@ -90,11 +90,11 @@ export default async function Page({
         <div className="table-wrap">
           <table className="table w-full">
             <colgroup>
-              <col style={{ width: "60px" }} />   {/* ID */}
-              <col />                              {/* Nome */}
-              <col style={{ width: "230px" }} />  {/* CNPJ/CPF */}
-              <col />                              {/* Contato */}
-              <col style={{ width: "140px" }} />  {/* Ações */}
+              <col style={{ width: "60px" }} />
+              <col />
+              <col style={{ width: "230px" }} />
+              <col />
+              <col style={{ width: "140px" }} />
             </colgroup>
 
             <thead>
@@ -168,7 +168,7 @@ export default async function Page({
                         </ConfirmSubmit>
                       </form>
 
-                      {/* form oculto que recebe os inputs via attribute `form` */}
+                      {/* form oculto para receber inputs via atributo `form` */}
                       <AutoCloseForm id={formId} action={atualizarFornecedor} className="hidden">
                         <input type="hidden" name="id" value={f.id} />
                       </AutoCloseForm>
