@@ -18,26 +18,26 @@ export default function AutoCloseForm({
   resetOnSubmit = true,
   delayMs = 0,
   disableButtonsOnSubmit = true,
+  onSubmit,
   ...props
 }: AutoCloseFormProps) {
   const ref = React.useRef<HTMLFormElement>(null);
 
-  const onSubmit: React.FormEventHandler<HTMLFormElement> = (e) => {
-    // NÃO chame e.preventDefault(): deixe a server action rodar normalmente
-    props.onSubmit?.(e);
+  const handleSubmit: React.FormEventHandler<HTMLFormElement> = (e) => {
+    // Deixa a server action prosseguir normalmente
+    onSubmit?.(e);
 
     const form = ref.current;
     if (!form) return;
 
     // Evita duplo clique no submit até o próximo ciclo
     if (disableButtonsOnSubmit) {
-      const btns = form.querySelectorAll('button, input[type="submit"]');
-      btns.forEach((el) => {
-        (el as HTMLButtonElement | HTMLInputElement).disabled = true;
-      });
+      const btns = form.querySelectorAll<HTMLButtonElement | HTMLInputElement>(
+        'button, input[type="submit"]'
+      );
+      btns.forEach((el) => (el.disabled = true));
     }
 
-    // Aguardar um tick (ou o delay configurado) para fechar/limpar
     const run = () => {
       try {
         if (resetOnSubmit) form.reset();
@@ -45,22 +45,18 @@ export default function AutoCloseForm({
 
       if (closeOnSubmit) {
         const details = form.closest('details');
-        if (details && details.hasAttribute('open')) {
-          details.removeAttribute('open');
+        if (details && (details as HTMLDetailsElement).open) {
+          (details as HTMLDetailsElement).open = false;
         }
       }
 
-      // tira foco do botão/summary
+      // tira foco do elemento ativo
       (document.activeElement as HTMLElement | null)?.blur?.();
     };
 
-    if (delayMs > 0) {
-      setTimeout(run, delayMs);
-    } else {
-      // 0ms: empurra pro final do frame atual
-      setTimeout(run, 0);
-    }
+    if (delayMs > 0) setTimeout(run, delayMs);
+    else setTimeout(run, 0);
   };
 
-  return <form ref={ref} {...props} onSubmit={onSubmit} />;
+  return <form ref={ref} {...props} onSubmit={handleSubmit} />;
 }
