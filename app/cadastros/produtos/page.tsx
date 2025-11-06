@@ -191,7 +191,7 @@ if (searchParams?.e === "NEXT_REDIRECT") {
               <col style={{ width: "25%" }} />    {/* P1 */}
               <col style={{ width: "18%" }} />    {/* Forn P1 */}
               <col style={{ width: "25%" }} />    {/* P3 */}
-              <col style={{ width: "18%" }} />    {/* Forn P3 */}
+              <col style={{ width: "30%" }} />    {/* Forn P3 */}
               <col style={{ width: "120px" }} />  {/* Ações */}
             </colgroup>
 
