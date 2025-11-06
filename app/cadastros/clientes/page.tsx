@@ -115,18 +115,18 @@ export default async function Page({ searchParams }: PageProps) {
 
       {/* tabela */}
       <section className="card p-0 overflow-hidden">
-        <div className="overflow-x-auto">
+        <div className="table-wrap">
           <table className="table w-full">
-            {/* larguras fixas por coluna */}
+            {/* larguras fixas (≤100%) */}
             <colgroup>
-              <col style={{ width: "56px" }} />     {/* ID */}
-              <col style={{ width: "18%" }} />      {/* Nome */}
-              <col style={{ width: "16%" }} />      {/* CPF */}
-              <col style={{ width: "16%" }} />      {/* CNPJ */}
-              <col style={{ width: "20%" }} />      {/* E-mail */}
-              <col style={{ width: "14%" }} />      {/* Telefone */}
-              <col />                                {/* Endereço (auto) */}
-              <col style={{ width: "120px" }} />    {/* Ações */}
+              <col style={{ width: "56px" }} />   {/* ID */}
+              <col style={{ width: "16%" }} />    {/* Nome */}
+              <col style={{ width: "14%" }} />    {/* CPF */}
+              <col style={{ width: "12%" }} />    {/* CNPJ */}
+              <col style={{ width: "18%" }} />    {/* E-mail */}
+              <col style={{ width: "12%" }} />    {/* Telefone */}
+              <col />                              {/* Endereço (auto) */}
+              <col style={{ width: "110px" }} />  {/* Ações */}
             </colgroup>
 
             <thead>
@@ -249,12 +249,11 @@ export default async function Page({ searchParams }: PageProps) {
                         </ConfirmSubmit>
                       </form>
 
-                      {/* Form real (oculto). Inputs acima apontam para ele via atributo 'form' */}
+                      {/* Form real (oculto). Inputs apontam para ele via atributo 'form' */}
                       <AutoCloseForm id={formId} action={atualizarClienteUsuario} className="hidden">
                         <input type="hidden" name="id" value={c.id} />
                       </AutoCloseForm>
 
-                      {/* controlador que liga/desliga modo edição na linha */}
                       <ToggleRowEditing detailsId={detailsId} rowId={rowId} />
                     </td>
                   </tr>
@@ -272,7 +271,7 @@ export default async function Page({ searchParams }: PageProps) {
           </table>
         </div>
 
-        {/* estilos compactos + paleta cinza/azul/preto/branco */}
+        {/* estilos compactos + anti-overflow */}
         <style>{`
           :root{
             --bg:#fff; --border:#e6e7eb; --muted:#f7f7fb;
@@ -287,7 +286,7 @@ export default async function Page({ searchParams }: PageProps) {
 
           .input{ height:36px; padding:0 10px; border:1px solid var(--border); border-radius:10px; outline:none; background:#fff; font-size:.95rem; }
           .input:focus{ border-color:var(--accent); box-shadow:0 0 0 3px var(--ring); }
-          .input-sm{ height:32px; padding:0 8px; font-size:.9rem; }
+          .input-sm{ height:30px; padding:0 8px; font-size:.9rem; }
 
           .btn{ display:inline-flex; align-items:center; justify-content:center; border:1px solid var(--border); border-radius:9999px; padding:0 12px; height:36px; font-weight:500; background:#f9fafb; color:var(--text); cursor:pointer; transition:.15s; font-size:.95rem; }
           .btn:hover{ background:#f3f4f6; }
@@ -302,12 +301,28 @@ export default async function Page({ searchParams }: PageProps) {
           .pill{ display:inline-block; padding:5px 10px; border-radius:9999px; border:1px solid var(--border); background:var(--muted); color:var(--text); cursor:pointer; font-size:.85rem; }
           .pill:hover{ background:#eef2ff; border-color:#dfe3f1; }
 
-          .table{ border-collapse:collapse; table-layout:fixed; min-width:100%; font-size:.95rem; }
-          .table thead th{ background:#f8fafc; color:var(--subtext); text-align:left; font-weight:600; font-size:.85rem; padding:10px 12px; border-bottom:1px solid var(--border); }
-          .table tbody td{ padding:10px 12px; border-bottom:1px solid var(--border); vertical-align:middle; color:var(--text); }
+          /* -------- tabela -------- */
+          .table-wrap{ overflow-x: hidden; } /* corta qq px a mais sem barra */
+          .table{ border-collapse:collapse; table-layout:fixed; width:100%; font-size:.95rem; }
+          .table thead th{
+            background:#f8fafc; color:var(--subtext); text-align:left; font-weight:600; font-size:.85rem;
+            padding:10px 12px; border-bottom:1px solid var(--border);
+          }
+          .table tbody td{
+            padding:10px 12px; border-bottom:1px solid var(--border); vertical-align:middle; color:var(--text);
+            overflow:hidden; text-overflow:ellipsis; white-space:nowrap; /* evita estourar */
+          }
           .table tbody tr:hover td{ background:#fafafa; }
 
-          /* inline edit: mostra/oculta view x input */
+          /* inputs não estouram a célula */
+          .table input, .table .input{
+            width:100%; max-width:100%; min-width:0; box-sizing:border-box;
+          }
+
+          /* no modo edição, permitir quebra sem empurrar a largura */
+          tr.editing td{ white-space:normal; }
+
+          /* inline edit: view x input */
           .cell-edit{ display:none; }
           tr.editing .cell-view{ display:none; }
           tr.editing .cell-edit{ display:block; }
