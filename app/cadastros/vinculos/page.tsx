@@ -1,14 +1,12 @@
 // app/cadastros/vinculos/page.tsx
-export const dynamic = 'force-dynamic';
-
 import React from 'react';
 import { prisma } from '@/lib/prisma';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { redirect } from 'next/navigation';
 import { upsertVinculo, excluirVinculo } from '@/actions/vinculos';
 import InlineVinculoRow from '@/components/InlineVinculoRow';
-import CleanRedirectParam from '@/components/CleanRedirectParam';
-import FormPending from '@/components/FormPending';
+
+export const dynamic = 'force-dynamic';
 
 export default async function Page({
   searchParams,
@@ -55,11 +53,8 @@ export default async function Page({
 
   return (
     <main style={{ padding: 24, display: 'grid', gap: 16, maxWidth: 1200, margin: '0 auto' }}>
-      {/* limpa ?e=NEXT_REDIRECT do path em CSR */}
-      <CleanRedirectParam paramKey="e" badValue="NEXT_REDIRECT" />
-
       <h1 style={{ fontSize: 22, fontWeight: 700 }}>
-        Cadastros <span style={{ color: '#9ca3af' }}>/</span> Vínculos Fornecedor ↔ Produto
+        Cadastros / Vínculos Fornecedor ↔ Produto
       </h1>
 
       {msgErro && (
@@ -74,21 +69,21 @@ export default async function Page({
         </div>
       )}
 
-      {/* Upsert com overlay de loading */}
+      {/* Novo/Atualizar vínculo (upsert) */}
       <section style={card}>
         <h2 style={h2}>Criar/Atualizar vínculo (upsert)</h2>
 
-        <FormPending action={upsertVinculo} submitText="Salvar" submittingText="Salvando...">
-          {/* linha de selects e campos gerais */}
-          <div style={{ display: 'grid', gap: 8, gridTemplateColumns: '1.1fr 1.1fr 0.9fr 1.3fr' }}>
-            <select name="fornecedorId" defaultValue="" required style={{ ...input, height: 36 }}>
+        <form action={upsertVinculo} style={{ display: 'grid', gap: 12 }}>
+          {/* Linha 1 — Seleções */}
+          <div style={{ display: 'grid', gap: 8, gridTemplateColumns: '1.1fr 1.1fr 0.9fr 1.4fr' }}>
+            <select name="fornecedorId" defaultValue="" required style={select}>
               <option value="" disabled>Fornecedor</option>
               {fornecedores.map((f) => (
                 <option key={f.id} value={f.id}>{f.nome}</option>
               ))}
             </select>
 
-            <select name="produtoId" defaultValue="" required style={{ ...input, height: 36 }}>
+            <select name="produtoId" defaultValue="" required style={select}>
               <option value="" disabled>Produto/Serviço</option>
               {produtos.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -101,9 +96,10 @@ export default async function Page({
             <input name="observacao" placeholder="Observação (opcional)" style={input} />
           </div>
 
-          {/* grupos de preço */}
+          {/* Linha 2 e 3 — Grupos de preço */}
           <div style={{ display: 'grid', gap: 12, gridTemplateColumns: '1fr 1fr' }}>
-            <fieldset style={fieldSet}>
+            {/* Materiais */}
+            <fieldset style={field}>
               <legend style={legend}>Preços de materiais</legend>
               <div style={{ display: 'grid', gap: 8, gridTemplateColumns: '1fr 1fr 1fr' }}>
                 <input name="precoMatP1" placeholder="Materiais P1 (R$)" inputMode="decimal" style={input} />
@@ -112,7 +108,8 @@ export default async function Page({
               </div>
             </fieldset>
 
-            <fieldset style={fieldSet}>
+            {/* Mão de obra */}
+            <fieldset style={field}>
               <legend style={legend}>Preços de serviços</legend>
               <div style={{ display: 'grid', gap: 8, gridTemplateColumns: '1fr 1fr 1fr' }}>
                 <input name="precoMoM1" placeholder="Mão de Obra M1 (R$)" inputMode="decimal" style={input} />
@@ -121,7 +118,11 @@ export default async function Page({
               </div>
             </fieldset>
           </div>
-        </FormPending>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <button type="submit" style={btn}>Salvar</button>
+          </div>
+        </form>
 
         <p style={{ marginTop: 6, fontSize: 12, color: '#666' }}>
           Dica: selecione o mesmo fornecedor+produto e preencha novos valores para atualizar (upsert).
@@ -129,18 +130,17 @@ export default async function Page({
       </section>
 
       {/* Lista */}
-      <section style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden', boxShadow: '0 1px 2px rgba(0,0,0,.03)' }}>
+      <section>
         <table
           style={{
             width: '100%',
             borderCollapse: 'collapse',
             background: '#fff',
             tableLayout: 'fixed',
-            fontSize: 14,
           }}
         >
           <colgroup>
-            <col style={{ width: '25%' }} />
+            <col style={{ width: '26%' }} />
             <col style={{ width: '20%' }} />
             <col style={{ width: '8%' }} />
             <col style={{ width: 70 }} />
@@ -149,8 +149,8 @@ export default async function Page({
             <col style={{ width: 70 }} />
             <col style={{ width: 70 }} />
             <col style={{ width: 70 }} />
-            <col style={{ width: '15%' }} />
-            <col style={{ width: '15%' }} />
+            <col style={{ width: '14%' }} />
+            <col style={{ width: '10%' }} />
             <col style={{ width: '12%' }} />
           </colgroup>
 
@@ -201,20 +201,38 @@ export default async function Page({
   );
 }
 
-/* estilos compartilhados */
-const card: React.CSSProperties = { padding: 12, border: '1px solid #eee', borderRadius: 8, background: '#fff' };
+/* estilos */
+const card: React.CSSProperties = {
+  padding: 12,
+  border: '1px solid #eee',
+  borderRadius: 8,
+  background: '#fff',
+};
 const h2: React.CSSProperties = { fontSize: 16, margin: '0 0 10px' };
+
+const legend: React.CSSProperties = {
+  fontSize: 12,
+  color: '#444',
+  padding: '0 6px',
+};
+const field: React.CSSProperties = {
+  border: '1px dashed #e6e6e6',
+  borderRadius: 8,
+  padding: 10,
+  minWidth: 0,
+};
+
 const th: React.CSSProperties = {
   textAlign: 'left',
   padding: 10,
   borderBottom: '1px solid #eee',
   background: '#fafafa',
   fontWeight: 600,
-  whiteSpace: 'nowrap',
+  whiteSpace: 'normal',
 };
 const td: React.CSSProperties = {
   padding: 10,
-  borderTop: '1px solid #f2f2f2',
+  borderBottom: '1px solid #f2f2f2',
   verticalAlign: 'top',
   wordBreak: 'break-word',
   overflowWrap: 'anywhere',
@@ -228,14 +246,13 @@ const input: React.CSSProperties = {
   width: '100%',
   boxSizing: 'border-box',
 };
-const fieldSet: React.CSSProperties = {
-  border: '1px dashed #e5e7eb',
+const select: React.CSSProperties = { ...input, height: 36 };
+const btn: React.CSSProperties = {
+  height: 36,
+  padding: '0 14px',
   borderRadius: 8,
-  padding: 8,
-  minWidth: 0,
-};
-const legend: React.CSSProperties = {
-  fontSize: 12,
-  color: '#6b7280',
-  padding: '0 4px',
+  border: '1px solid #ddd',
+  background: '#111',
+  color: '#fff',
+  cursor: 'pointer',
 };
