@@ -1,70 +1,87 @@
-'use server';
+"use server";
 
-import { revalidatePath } from 'next/cache';
-import { redirect } from 'next/navigation';
-import { prisma } from '@/lib/prisma';
-import { authUser } from '@/lib/authUser';
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { prisma } from "@/lib/prisma";
+import { authUser } from "@/lib/authUser";
 
-const PAGE = '/cadastros/fornecedores';
+const PAGE = "/cadastros/fornecedores";
 
-const digits = (s?: FormDataEntryValue | null) => String(s ?? '').replace(/\D+/g, '');
+const digits = (s?: FormDataEntryValue | null) =>
+  String(s ?? "").replace(/\D+/g, "");
+
+function backWithError(err: unknown) {
+  const msg =
+    (err as any)?.message ??
+    (typeof err === "string" ? err : "Erro inesperado.");
+  console.error("[fornecedores action]", err);
+  redirect(`${PAGE}?e=${encodeURIComponent(msg)}`);
+}
 
 export async function criarFornecedor(formData: FormData) {
-  const { id: usuarioId } = await authUser();
+  try {
+    const { id: usuarioId } = await authUser();
 
-  const nome = String(formData.get('nome') ?? '').trim();
-  const cnpjCpf = digits(formData.get('cnpjCpf'));
-  const contato = (String(formData.get('contato') ?? '').trim() || null) as string | null;
+    const nome = String(formData.get("nome") ?? "").trim();
+    const cnpjCpf = digits(formData.get("cnpjCpf"));
+    const contato = (String(formData.get("contato") ?? "").trim() || null) as
+      | string
+      | null;
 
-  if (!nome) {
-    console.error('[fornecedores] nome obrigatório');
-    redirect(PAGE);
+    if (!nome) throw new Error("Informe o nome do fornecedor.");
+
+    await prisma.fornecedor.create({
+      data: { usuarioId, nome, cnpjCpf, contato },
+    });
+
+    revalidatePath(PAGE);
+    redirect(`${PAGE}?ok=1`);
+  } catch (err) {
+    backWithError(err);
   }
-
-  await prisma.fornecedor.create({
-    data: { usuarioId, nome, cnpjCpf, contato },
-  });
-
-  revalidatePath(PAGE);
-  redirect(PAGE);
 }
 
 export async function atualizarFornecedor(formData: FormData) {
-  const { id: usuarioId } = await authUser();
+  try {
+    const { id: usuarioId } = await authUser();
 
-  const id = Number(formData.get('id'));
-  const nome = String(formData.get('nome') ?? '').trim();
-  const cnpjCpf = digits(formData.get('cnpjCpf'));
-  const contato = (String(formData.get('contato') ?? '').trim() || null) as string | null;
+    const id = Number(formData.get("id"));
+    const nome = String(formData.get("nome") ?? "").trim();
+    const cnpjCpf = digits(formData.get("cnpjCpf"));
+    const contato = (String(formData.get("contato") ?? "").trim() || null) as
+      | string
+      | null;
 
-  if (!id || !nome) {
-    console.error('[fornecedores] id/nome inválidos');
-    redirect(PAGE);
+    if (!id) throw new Error("ID inválido.");
+    if (!nome) throw new Error("Informe o nome do fornecedor.");
+
+    // protege por usuário (não depende de unique composto)
+    await prisma.fornecedor.updateMany({
+      where: { id, usuarioId },
+      data: { nome, cnpjCpf, contato },
+    });
+
+    revalidatePath(PAGE);
+    redirect(`${PAGE}?ok=1`);
+  } catch (err) {
+    backWithError(err);
   }
-
-  // protege por usuário
-  await prisma.fornecedor.update({
-    where: { id, usuarioId },
-    data: { nome, cnpjCpf, contato },
-  });
-
-  revalidatePath(PAGE);
-  redirect(PAGE);
 }
 
 export async function excluirFornecedor(formData: FormData) {
-  const { id: usuarioId } = await authUser();
+  try {
+    const { id: usuarioId } = await authUser();
 
-  const id = Number(formData.get('id'));
-  if (!id) {
-    console.error('[fornecedores] id inválido para excluir');
-    redirect(PAGE);
+    const id = Number(formData.get("id"));
+    if (!id) throw new Error("ID inválido para excluir.");
+
+    await prisma.fornecedor.deleteMany({
+      where: { id, usuarioId },
+    });
+
+    revalidatePath(PAGE);
+    redirect(`${PAGE}?ok=1`);
+  } catch (err) {
+    backWithError(err);
   }
-
-  await prisma.fornecedor.delete({
-    where: { id, usuarioId },
-  });
-
-  revalidatePath(PAGE);
-  redirect(PAGE);
 }
