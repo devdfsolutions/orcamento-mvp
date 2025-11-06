@@ -43,7 +43,7 @@ export default async function Page({ searchParams }: PageProps) {
   });
   if (!me) redirect("/login");
 
-  // paginação server-side leve
+  // paginação server-side
   const pageSize = 50;
   const page = Math.max(1, Number(searchParams?.p ?? "1"));
   const skip = (page - 1) * pageSize;
@@ -263,10 +263,14 @@ export default async function Page({ searchParams }: PageProps) {
           </tbody>
         </table>
 
-        {/* CSS mínimo para mostrar o botão Salvar quando details abrir */}
         <style>{`
+          /* Mostrar botão Salvar quando o details estiver aberto */
           td .save-btn { display: none; }
           td details[open] + .save-btn { display: inline-block; }
+
+          /* Tira o "triângulo" padrão e estiliza o summary como botão */
+          details > summary::-webkit-details-marker { display: none; }
+          details > summary { list-style: none; }
         `}</style>
       </section>
 
