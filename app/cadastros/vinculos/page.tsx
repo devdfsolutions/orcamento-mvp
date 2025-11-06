@@ -1,46 +1,37 @@
 // app/cadastros/vinculos/page.tsx
-import React from "react";
-import { prisma } from "@/lib/prisma";
-import { getSupabaseServer } from "@/lib/supabaseServer";
-import { redirect } from "next/navigation";
-import { upsertVinculo, excluirVinculo } from "@/actions/vinculos";
-import InlineVinculoRow from "@/components/InlineVinculoRow";
-import { PendingOverlay, PendingFieldset, SubmitButton } from "@/components/FormPending";
+import React from 'react';
+import { prisma } from '@/lib/prisma';
+import { getSupabaseServer } from '@/lib/supabaseServer';
+import { redirect } from 'next/navigation';
+import { upsertVinculo, excluirVinculo } from '@/actions/vinculos';
+import InlineVinculoRow from '@/components/InlineVinculoRow';
 
-export const dynamic = "force-dynamic";
+export const dynamic = 'force-dynamic';
 
 export default async function Page({
   searchParams,
-}: {
-  searchParams?: { e?: string; ok?: string };
-}) {
-  // auth
+}: { searchParams?: { e?: string } }) {
+  // Auth
   const supabase = await getSupabaseServer();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect('/login');
 
   const me = await prisma.usuario.findUnique({
     where: { supabaseUserId: user.id },
     select: { id: true },
   });
-  if (!me) redirect("/login");
+  if (!me) redirect('/login');
 
-  if (searchParams?.e === "NEXT_REDIRECT") {
-    redirect("/cadastros/vinculos");
-  }
-
-  // data
+  // Dados (somente do meu usuário)
   const [fornecedores, produtos, vinculos] = await Promise.all([
     prisma.fornecedor.findMany({
       where: { usuarioId: me.id },
-      orderBy: { nome: "asc" },
+      orderBy: { nome: 'asc' },
       select: { id: true, nome: true },
     }),
     prisma.produtoServico.findMany({
       where: { usuarioId: me.id },
-      orderBy: { nome: "asc" },
+      orderBy: { nome: 'asc' },
       select: {
         id: true,
         nome: true,
@@ -49,187 +40,219 @@ export default async function Page({
     }),
     prisma.fornecedorProduto.findMany({
       where: { usuarioId: me.id },
-      orderBy: [{ produto: { nome: "asc" } }, { fornecedor: { nome: "asc" } }],
+      orderBy: [{ produto: { nome: 'asc' } }, { fornecedor: { nome: 'asc' } }],
       include: {
         fornecedor: { select: { id: true, nome: true } },
-        produto: {
-          select: { id: true, nome: true, unidade: { select: { sigla: true } } },
-        },
+        produto: { select: { id: true, nome: true, unidade: { select: { sigla: true } } } },
       },
     }),
   ]);
 
   const rawErr = searchParams?.e ?? null;
-  const msgErro =
-    rawErr && rawErr !== "NEXT_REDIRECT" ? decodeURIComponent(rawErr) : null;
-  const ok = searchParams?.ok === "1";
+  const msgErro = rawErr && rawErr !== 'NEXT_REDIRECT' ? decodeURIComponent(rawErr) : null;
 
   return (
-    <main className="max-w-[1200px] mr-auto ml-6 p-6 grid gap-5">
-      <h1 className="text-2xl font-semibold text-zinc-900">
-        Cadastros <span className="text-zinc-400">/</span> Vínculos Fornecedor ↔ Produto
+    <main style={{ padding: 24, display: 'grid', gap: 16, maxWidth: 1200, margin: '0 auto' }}>
+      <h1 style={{ fontSize: 22, fontWeight: 700 }}>
+        Cadastros / Vínculos Fornecedor ↔ Produto
       </h1>
 
       {msgErro && (
-        <div className="rounded-xl border border-rose-200 bg-rose-50 text-rose-800 px-3 py-2 text-sm">
+        <div style={{
+          padding: '10px 12px',
+          border: '1px solid #f1d0d0',
+          background: '#ffeaea',
+          color: '#7a0000',
+          borderRadius: 8,
+        }}>
           {msgErro}
         </div>
       )}
-      {ok && (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-800 px-3 py-2 text-sm">
-          Salvo com sucesso.
-        </div>
-      )}
 
-      {/* form */}
-      <section className="card relative">
-        <div className="card-head mb-2">
-          <h2>Criar/Atualizar vínculo (upsert)</h2>
-        </div>
+      {/* Novo/Atualizar vínculo (upsert) */}
+      <section style={card}>
+        <h2 style={h2}>Criar/Atualizar vínculo (upsert)</h2>
 
-        <form action={upsertVinculo} className="grid gap-3">
-          <PendingOverlay />
-          <PendingFieldset>
-            {/* linha 1 */}
-            <div className="grid gap-2 grid-cols-[2fr_2fr_1fr_3fr]">
-              <select name="fornecedorId" defaultValue="" required className="input h-9">
-                <option value="" disabled>Fornecedor</option>
-                {fornecedores.map((f) => (
-                  <option key={f.id} value={f.id}>{f.nome}</option>
-                ))}
-              </select>
+        <form action={upsertVinculo} style={{ display: 'grid', gap: 12 }}>
+          {/* Linha 1 — Seleções */}
+          <div style={{ display: 'grid', gap: 8, gridTemplateColumns: '1.1fr 1.1fr 0.9fr 1.4fr' }}>
+            <select name="fornecedorId" defaultValue="" required style={select}>
+              <option value="" disabled>Fornecedor</option>
+              {fornecedores.map((f) => (
+                <option key={f.id} value={f.id}>{f.nome}</option>
+              ))}
+            </select>
 
-              <select name="produtoId" defaultValue="" required className="input h-9">
-                <option value="" disabled>Produto/Serviço</option>
-                {produtos.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.nome} {p.unidade?.sigla ? `(${p.unidade.sigla})` : ""}
-                  </option>
-                ))}
-              </select>
+            <select name="produtoId" defaultValue="" required style={select}>
+              <option value="" disabled>Produto/Serviço</option>
+              {produtos.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.nome} {p.unidade?.sigla ? `(${p.unidade.sigla})` : ''}
+                </option>
+              ))}
+            </select>
 
-              <input
-                name="dataUltAtual"
-                placeholder="Data (DD/MM/AAAA)"
-                className="input"
-                inputMode="numeric"
-              />
-              <input
-                name="observacao"
-                placeholder="Observação (opcional)"
-                className="input"
-              />
-            </div>
+            <input name="dataUltAtual" placeholder="Data (DD/MM/AAAA)" style={input} />
+            <input name="observacao" placeholder="Observação (opcional)" style={input} />
+          </div>
 
-            {/* linha 2 */}
-            <div className="grid gap-2 grid-cols-6">
-              <input name="precoMatP1" placeholder="Materiais P1 (R$)" inputMode="decimal" className="input" />
-              <input name="precoMatP2" placeholder="Materiais P2 (R$)" inputMode="decimal" className="input" />
-              <input name="precoMatP3" placeholder="Materiais P3 (R$)" inputMode="decimal" className="input" />
-              <input name="precoMoM1"  placeholder="Mão de Obra M1 (R$)" inputMode="decimal" className="input" />
-              <input name="precoMoM2"  placeholder="Mão de Obra M2 (R$)" inputMode="decimal" className="input" />
-              <input name="precoMoM3"  placeholder="Mão de Obra M3 (R$)" inputMode="decimal" className="input" />
-            </div>
+          {/* Linha 2 e 3 — Grupos de preço */}
+          <div style={{ display: 'grid', gap: 12, gridTemplateColumns: '1fr 1fr' }}>
+            {/* Materiais */}
+            <fieldset style={field}>
+              <legend style={legend}>Preços de materiais</legend>
+              <div style={{ display: 'grid', gap: 8, gridTemplateColumns: '1fr 1fr 1fr' }}>
+                <input name="precoMatP1" placeholder="Materiais P1 (R$)" inputMode="decimal" style={input} />
+                <input name="precoMatP2" placeholder="Materiais P2 (R$)" inputMode="decimal" style={input} />
+                <input name="precoMatP3" placeholder="Materiais P3 (R$)" inputMode="decimal" style={input} />
+              </div>
+            </fieldset>
 
-            <div className="flex justify-end">
-              <SubmitButton className="btn btn-primary">Salvar</SubmitButton>
-            </div>
-          </PendingFieldset>
+            {/* Mão de obra */}
+            <fieldset style={field}>
+              <legend style={legend}>Preços de serviços</legend>
+              <div style={{ display: 'grid', gap: 8, gridTemplateColumns: '1fr 1fr 1fr' }}>
+                <input name="precoMoM1" placeholder="Mão de Obra M1 (R$)" inputMode="decimal" style={input} />
+                <input name="precoMoM2" placeholder="Mão de Obra M2 (R$)" inputMode="decimal" style={input} />
+                <input name="precoMoM3" placeholder="Mão de Obra M3 (R$)" inputMode="decimal" style={input} />
+              </div>
+            </fieldset>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <button type="submit" style={btn}>Salvar</button>
+          </div>
         </form>
 
-        <p className="mt-2 text-xs text-zinc-500">
+        <p style={{ marginTop: 6, fontSize: 12, color: '#666' }}>
           Dica: selecione o mesmo fornecedor+produto e preencha novos valores para atualizar (upsert).
         </p>
       </section>
 
-      {/* lista */}
-      <section className="card p-0 overflow-hidden">
-        <div className="table-wrap">
-          <table className="table w-full">
-            {/* sem colgroup fixo para evitar corte; deixa o browser dimensionar */}
-            <thead>
-              <tr>
-                <th>Produto/Serviço</th>
-                <th>Fornecedor</th>
-                <th className="text-center">UM</th>
-                <th className="text-right">P1</th>
-                <th className="text-right">P2</th>
-                <th className="text-right">P3</th>
-                <th className="text-right">M1</th>
-                <th className="text-right">M2</th>
-                <th className="text-right">M3</th>
-                <th>Atualização</th>
-                <th>Obs</th>
-                <th style={{ width: 140 }}></th>
-              </tr>
-            </thead>
+      {/* Lista */}
+      <section>
+        <table
+          style={{
+            width: '100%',
+            borderCollapse: 'collapse',
+            background: '#fff',
+            tableLayout: 'fixed',
+          }}
+        >
+          <colgroup>
+            <col style={{ width: '26%' }} />
+            <col style={{ width: '20%' }} />
+            <col style={{ width: '8%' }} />
+            <col style={{ width: 70 }} />
+            <col style={{ width: 70 }} />
+            <col style={{ width: 70 }} />
+            <col style={{ width: 70 }} />
+            <col style={{ width: 70 }} />
+            <col style={{ width: 70 }} />
+            <col style={{ width: '14%' }} />
+            <col style={{ width: '10%' }} />
+            <col style={{ width: '12%' }} />
+          </colgroup>
 
-            <tbody>
-              {vinculos.map((v) => {
-                const safeV = {
-                  ...v,
-                  precoMatP1: v.precoMatP1 != null ? Number(v.precoMatP1) : null,
-                  precoMatP2: v.precoMatP2 != null ? Number(v.precoMatP2) : null,
-                  precoMatP3: v.precoMatP3 != null ? Number(v.precoMatP3) : null,
-                  precoMoM1: v.precoMoM1 != null ? Number(v.precoMoM1) : null,
-                  precoMoM2: v.precoMoM2 != null ? Number(v.precoMoM2) : null,
-                  precoMoM3: v.precoMoM3 != null ? Number(v.precoMoM3) : null,
-                };
-                return (
-                  <InlineVinculoRow
-                    key={v.id}
-                    v={safeV}
-                    onSubmit={upsertVinculo}
-                    onDelete={excluirVinculo}
-                  />
-                );
-              })}
+          <thead>
+            <tr>
+              <th style={th}>Produto/Serviço</th>
+              <th style={th}>Fornecedor</th>
+              <th style={{ ...th, textAlign: 'center' }}>UM</th>
+              <th style={{ ...th, textAlign: 'right' }}>P1</th>
+              <th style={{ ...th, textAlign: 'right' }}>P2</th>
+              <th style={{ ...th, textAlign: 'right' }}>P3</th>
+              <th style={{ ...th, textAlign: 'right' }}>M1</th>
+              <th style={{ ...th, textAlign: 'right' }}>M2</th>
+              <th style={{ ...th, textAlign: 'right' }}>M3</th>
+              <th style={th}>Atualização</th>
+              <th style={th}>Obs</th>
+              <th style={th}></th>
+            </tr>
+          </thead>
 
-              {vinculos.length === 0 && (
-                <tr>
-                  <td colSpan={12} className="text-center text-zinc-500 py-8">
-                    Nenhum vínculo cadastrado.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        <style>{`
-          :root{
-            --bg:#fff; --border:#e6e7eb; --muted:#f7f7fb;
-            --text:#0a0a0a; --subtext:#6b7280;
-            --primary:#0f172a; --primary-hover:#0b1222;
-            --accent:#2563eb; --ring:rgba(37,99,235,.25);
-          }
-          .card{ background:var(--bg); border:1px solid var(--border); border-radius:12px; padding:12px; box-shadow:0 1px 2px rgba(16,24,40,.04); }
-          .card-head h2{ margin:0; font-size:.95rem; font-weight:600; color:var(--text); }
-
-          .input{ height:36px; padding:0 10px; border:1px solid var(--border); border-radius:10px; outline:none; background:#fff; font-size:.95rem; }
-          .input:focus{ border-color:var(--accent); box-shadow:0 0 0 3px var(--ring); }
-
-          .btn{ display:inline-flex; align-items:center; justify-content:center; border:1px solid var(--border); border-radius:9999px; padding:0 12px; height:36px; font-weight:500; background:#f9fafb; color:var(--text); cursor:pointer; transition:.15s; font-size:.95rem; }
-          .btn:hover{ background:#f3f4f6; }
-          .btn-primary{ background:var(--primary); border-color:var(--primary); color:#fff; }
-          .btn-primary:hover{ background:var(--primary-hover); }
-
-          .table-wrap{ overflow-x:auto; }
-          .table{ border-collapse:collapse; table-layout:auto; width:100%; font-size:.95rem; }
-          .table thead th{
-            background:#f8fafc; color:var(--subtext); text-align:left; font-weight:600; font-size:.85rem;
-            padding:10px 12px; border-bottom:1px solid var(--border); white-space:nowrap;
-          }
-          .table thead th.text-right{ text-align:right; }
-          .table thead th.text-center{ text-align:center; }
-          .table tbody td{
-            padding:10px 12px; border-bottom:1px solid var(--border); vertical-align:middle; color:var(--text);
-            /* >>> sem corte: mostra tudo */
-            white-space:normal; overflow:visible; text-overflow:clip; word-break:break-word;
-          }
-          .table tbody tr:hover td{ background:#fafafa; }
-        `}</style>
+          <tbody>
+            {vinculos.map((v) => {
+              const safeV = {
+                ...v,
+                precoMatP1: v.precoMatP1 != null ? Number(v.precoMatP1) : null,
+                precoMatP2: v.precoMatP2 != null ? Number(v.precoMatP2) : null,
+                precoMatP3: v.precoMatP3 != null ? Number(v.precoMatP3) : null,
+                precoMoM1: v.precoMoM1 != null ? Number(v.precoMoM1) : null,
+                precoMoM2: v.precoMoM2 != null ? Number(v.precoMoM2) : null,
+                precoMoM3: v.precoMoM3 != null ? Number(v.precoMoM3) : null,
+              };
+              return (
+                <InlineVinculoRow
+                  key={v.id}
+                  v={safeV}
+                  onSubmit={upsertVinculo}
+                  onDelete={excluirVinculo}
+                />
+              );
+            })}
+            {vinculos.length === 0 && (
+              <tr><td style={td} colSpan={12}>Nenhum vínculo cadastrado.</td></tr>
+            )}
+          </tbody>
+        </table>
       </section>
     </main>
   );
 }
+
+/* estilos */
+const card: React.CSSProperties = {
+  padding: 12,
+  border: '1px solid #eee',
+  borderRadius: 8,
+  background: '#fff',
+};
+const h2: React.CSSProperties = { fontSize: 16, margin: '0 0 10px' };
+
+const legend: React.CSSProperties = {
+  fontSize: 12,
+  color: '#444',
+  padding: '0 6px',
+};
+const field: React.CSSProperties = {
+  border: '1px dashed #e6e6e6',
+  borderRadius: 8,
+  padding: 10,
+  minWidth: 0,
+};
+
+const th: React.CSSProperties = {
+  textAlign: 'left',
+  padding: 10,
+  borderBottom: '1px solid #eee',
+  background: '#fafafa',
+  fontWeight: 600,
+  whiteSpace: 'normal',
+};
+const td: React.CSSProperties = {
+  padding: 10,
+  borderBottom: '1px solid #f2f2f2',
+  verticalAlign: 'top',
+  wordBreak: 'break-word',
+  overflowWrap: 'anywhere',
+};
+const input: React.CSSProperties = {
+  height: 36,
+  padding: '0 10px',
+  border: '1px solid #ddd',
+  borderRadius: 8,
+  outline: 'none',
+  width: '100%',
+  boxSizing: 'border-box',
+};
+const select: React.CSSProperties = { ...input, height: 36 };
+const btn: React.CSSProperties = {
+  height: 36,
+  padding: '0 14px',
+  borderRadius: 8,
+  border: '1px solid #ddd',
+  background: '#111',
+  color: '#fff',
+  cursor: 'pointer',
+};
