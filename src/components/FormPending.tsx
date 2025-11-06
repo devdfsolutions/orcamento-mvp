@@ -1,85 +1,86 @@
-"use client";
+'use client';
 
-import React from "react";
-import { useFormStatus } from "react-dom";
+import * as React from 'react';
+import { useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 
-export function PendingFieldset({ children }: { children: React.ReactNode }) {
-  const { pending } = useFormStatus();
-  return <fieldset disabled={pending}>{children}</fieldset>;
-}
-
-export function SubmitButton({
-  className,
-  children,
-}: {
-  className?: string;
+type Props = {
+  action: (formData: FormData) => Promise<void> | void; // server action
   children: React.ReactNode;
-}) {
-  const { pending } = useFormStatus();
-  return (
-    <button
-      type="submit"
-      className={className}
-      disabled={pending}
-      aria-busy={pending}
-    >
-      {pending ? (
-        <span className="flex items-center gap-2">
-          <span className="spinner" aria-hidden />
-          Salvando...
-        </span>
-      ) : (
-        children
-      )}
-      <style>{`
-        .spinner {
-          width: 14px; height: 14px;
-          border-radius: 9999px;
-          border: 2px solid rgba(255,255,255,.4);
-          border-top-color: #fff;
-          display: inline-block;
-          animation: spin .8s linear infinite;
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
-      `}</style>
-    </button>
-  );
-}
+  submitText?: string;
+  submittingText?: string;
+};
 
-/** Overlay que cobre o container pai quando pending=true */
-export function PendingOverlay() {
-  const { pending } = useFormStatus();
-  if (!pending) return null;
+export default function FormPending({
+  action,
+  children,
+  submitText = 'Salvar',
+  submittingText = 'Salvando...',
+}: Props) {
+  const [isPending, startTransition] = useTransition();
+  const router = useRouter();
+
+  const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    startTransition(async () => {
+      await action(fd);
+      router.refresh();
+    });
+  };
+
   return (
-    <div className="pending-overlay" aria-hidden>
-      <div className="pending-box">
-        <span className="spinner-box" />
-        <span>Salvando...</span>
-      </div>
-      <style>{`
-        .pending-overlay {
-          position: absolute; inset: 0;
-          background: rgba(245,246,248,.55);
-          display: grid; place-items: center;
-          backdrop-filter: blur(1px);
-          pointer-events: all; /* bloqueia cliques */
-        }
-        .pending-box {
-          display:flex; gap:10px; align-items:center;
-          background:#0f172a; color:#fff;
-          border-radius: 9999px; padding: 8px 14px;
-          box-shadow: 0 6px 20px rgba(15,23,42,.25);
-          font-size: .925rem; font-weight: 500;
-        }
-        .spinner-box {
-          width: 14px; height: 14px;
-          border-radius: 9999px;
-          border: 2px solid rgba(255,255,255,.3);
-          border-top-color: #fff;
-          animation: spin .8s linear infinite;
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
-      `}</style>
+    <div style={{ position: 'relative' }}>
+      {isPending && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            background: 'rgba(255,255,255,.7)',
+            backdropFilter: 'blur(2px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: 8,
+            zIndex: 10,
+          }}
+        >
+          <div
+            style={{
+              width: 26,
+              height: 26,
+              borderRadius: '50%',
+              border: '4px solid #e5e7eb',
+              borderTopColor: '#111',
+              animation: 'spin .9s linear infinite',
+            }}
+          />
+          <span style={{ marginLeft: 10, fontWeight: 600 }}>{submittingText}</span>
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        </div>
+      )}
+
+      <form onSubmit={onSubmit} style={{ display: 'grid', gap: 12 }}>
+        {children}
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <button
+            type="submit"
+            disabled={isPending}
+            style={{
+              height: 36,
+              padding: '0 16px',
+              borderRadius: 8,
+              border: '1px solid #111',
+              background: '#111',
+              color: '#fff',
+              cursor: isPending ? 'not-allowed' : 'pointer',
+              opacity: isPending ? 0.85 : 1,
+            }}
+          >
+            {isPending ? submittingText : submitText}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }
