@@ -188,9 +188,9 @@ if (searchParams?.e === "NEXT_REDIRECT") {
               <col style={{ width: "10%" }} />    {/* Tipo */}
               <col style={{ width: "8%" }} />     {/* UM */}
               <col style={{ width: "14%" }} />    {/* Categoria */}
-              <col style={{ width: "10%" }} />    {/* P1 */}
+              <col style={{ width: "25%" }} />    {/* P1 */}
               <col style={{ width: "18%" }} />    {/* Forn P1 */}
-              <col style={{ width: "10%" }} />    {/* P3 */}
+              <col style={{ width: "25%" }} />    {/* P3 */}
               <col style={{ width: "18%" }} />    {/* Forn P3 */}
               <col style={{ width: "120px" }} />  {/* Ações */}
             </colgroup>
