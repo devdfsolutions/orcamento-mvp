@@ -25,7 +25,7 @@ const formatCPF = (v?: string | null) => {
 const formatCNPJ = (v?: string | null) => {
   const d = digits(v);
   if (d.length !== 14) return v || "—";
-  return d.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
+  return d.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2/$3-$4");
 };
 
 type PageProps = { searchParams?: { p?: string } };
@@ -81,34 +81,15 @@ export default async function Page({ searchParams }: PageProps) {
         </div>
 
         <form action={criarClienteUsuario} className="grid gap-2 md:grid-cols-4">
-          {/* overlay bloqueia clicks durante submit */}
           <PendingOverlay />
-
           <PendingFieldset>
             <input type="hidden" name="usuarioId" value={me.id} />
-
             <input name="nome" placeholder="Nome" required className="input" />
-
-            <MaskedInput
-              name="cpf"
-              placeholder="CPF (opcional)"
-              inputMode="numeric"
-              maxLength={14}
-              mask="cpf"
-              className="input"
-            />
-            <MaskedInput
-              name="cnpj"
-              placeholder="CNPJ (opcional)"
-              inputMode="numeric"
-              maxLength={18}
-              mask="cnpj"
-              className="input"
-            />
+            <MaskedInput name="cpf" placeholder="CPF (opcional)" inputMode="numeric" maxLength={14} mask="cpf" className="input" />
+            <MaskedInput name="cnpj" placeholder="CNPJ (opcional)" inputMode="numeric" maxLength={18} mask="cnpj" className="input" />
             <input name="email" placeholder="E-mail (opcional)" type="email" className="input" />
             <input name="telefone" placeholder="Telefone (opcional)" className="input" />
             <input name="endereco" placeholder="Endereço (opcional)" className="input md:col-span-2" />
-
             <div className="md:col-span-4 flex justify-start pt-1">
               <SubmitButton className="btn btn-primary">Adicionar Novo</SubmitButton>
             </div>
@@ -121,14 +102,14 @@ export default async function Page({ searchParams }: PageProps) {
         <div className="table-wrap">
           <table className="table w-full">
             <colgroup>
-              <col style={{ width: "56px" }} />      {/* ID */}
-              <col style={{ width: "22%" }} />       {/* Nome */}
-              <col style={{ width: "15%" }} />       {/* CPF */}
-              <col style={{ width: "18%" }} />       {/* CNPJ */}
-              <col style={{ width: "18%" }} />       {/* E-mail */}
-              <col style={{ width: "12%" }} />       {/* Telefone */}
-              <col />                                 {/* Endereço (flex) */}
-              <col style={{ width: "110px" }} />     {/* Ações */}
+              <col style={{ width: "56px" }} />    {/* ID */}
+              <col style={{ width: "22%" }} />     {/* Nome */}
+              <col style={{ width: "14%" }} />     {/* CPF */}
+              <col style={{ width: "16%" }} />     {/* CNPJ */}
+              <col style={{ width: "18%" }} />     {/* E-mail */}
+              <col style={{ width: "12%" }} />     {/* Telefone */}
+              <col style={{ width: "18%" }} />     {/* Endereço */}
+              <col style={{ width: "110px" }} />   {/* Ações */}
             </colgroup>
 
             <thead>
@@ -215,7 +196,7 @@ export default async function Page({ searchParams }: PageProps) {
           </table>
         </div>
 
-        {/* estilos compactos + sem “…” (permite quebra) */}
+        {/* estilos compactos + sem “quebra por letra” */}
         <style>{`
           :root{
             --bg:#fff; --border:#e6e7eb; --muted:#f7f7fb;
@@ -244,7 +225,7 @@ export default async function Page({ searchParams }: PageProps) {
           .pill{ display:inline-block; padding:5px 10px; border-radius:9999px; border:1px solid var(--border); background:var(--muted); color:var(--text); cursor:pointer; font-size:.85rem; }
           .pill:hover{ background:#eef2ff; border-color:#dfe3f1; }
 
-          .table-wrap{ overflow-x: hidden; }
+          .table-wrap{ overflow-x:hidden; }
           .table{ border-collapse:collapse; table-layout:fixed; width:100%; font-size:.95rem; }
           .table thead th{
             background:#f8fafc; color:var(--subtext); text-align:left; font-weight:600; font-size:.85rem;
@@ -252,7 +233,9 @@ export default async function Page({ searchParams }: PageProps) {
           }
           .table tbody td{
             padding:10px 12px; border-bottom:1px solid var(--border); vertical-align:middle; color:var(--text);
-            overflow:visible; text-overflow:initial; white-space:normal; word-break:break-word; overflow-wrap:anywhere;
+            /* nada de ellipsis + quebra só entre palavras */
+            white-space:normal; overflow:visible; text-overflow:clip;
+            word-break:normal; overflow-wrap:break-word;
           }
           .table tbody tr:hover td{ background:#fafafa; }
 
