@@ -20,10 +20,23 @@ export default async function Page({ params }: Props) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
+  const me = await prisma.usuario.findUnique({
+    where: { supabaseUserId: user.id },
+    select: { id: true },
+  });
+  if (!me) redirect('/login');
+
   const projetoId = Number(params.id);
 
+  // projeto precisa ser meu
+  const projeto = await prisma.projeto.findFirst({
+    where: { id: projetoId, usuarioId: me.id },
+    select: { id: true },
+  });
+  if (!projeto) redirect('/projetos');
+
   const estimativa = await prisma.estimativa.findFirst({
-    where: { projetoId, aprovada: true },
+    where: { projetoId, usuarioId: me.id, aprovada: true },
     include: {
       itens: {
         include: {
