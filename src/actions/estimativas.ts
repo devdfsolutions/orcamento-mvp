@@ -1,4 +1,3 @@
-// src/actions/estimativas.ts
 'use server';
 
 import { revalidatePath } from 'next/cache';
@@ -36,16 +35,16 @@ async function getMeUsuarioId(): Promise<number> {
   return me.id; // inteiro (FK)
 }
 
-/** busca preço do vínculo fornecedor-produto */
+/** busca preço do vínculo fornecedor-produto (agora com usuarioId) */
 async function pickPrecoFromVinculo(
+  usuarioId: number,
   fornecedorId: number,
   produtoId: number,
   fonteMat: FonteMat,
   fonteMo: FonteMo,
 ) {
-  // 🔧 trocado para findFirst (mais seguro que findUnique)
   const vinc = await prisma.fornecedorProduto.findFirst({
-    where: { fornecedorId, produtoId },
+    where: { usuarioId, fornecedorId, produtoId },
     select: {
       precoMatP1: true, precoMatP2: true, precoMatP3: true,
       precoMoM1: true,  precoMoM2: true,  precoMoM3: true,
@@ -86,32 +85,51 @@ async function backToItensWithError(estimativaId: number, err: unknown) {
 }
 
 /* =========================
- * PROJETOS
+ * PROJETOS (mantidos por segurança)
  * ========================= */
 
 export async function criarProjeto(formData: FormData) {
+  const usuarioId = await getMeUsuarioId();
   const nome = String(formData.get('nome') ?? '').trim();
   if (!nome) throw new Error('Informe o nome do projeto');
 
   const clienteIdRaw = String(formData.get('clienteId') ?? '').trim();
   const clienteId = clienteIdRaw ? Number(clienteIdRaw) : null;
 
+  // valida cliente do mesmo usuário (se houver)
+  if (clienteId) {
+    const cli = await prisma.clienteUsuario.findFirst({
+      where: { id: clienteId, usuarioId },
+      select: { id: true },
+    });
+    if (!cli) throw new Error('Cliente inválido para este usuário.');
+  }
+
   await prisma.projeto.create({
-    data: { nome, clienteId: clienteId ?? undefined, status: 'rascunho' },
+    data: { usuarioId, nome, clienteId: clienteId ?? undefined, status: 'rascunho' },
   });
 
   revalidatePath('/projetos');
 }
 
 export async function criarProjetoAndGo(formData: FormData) {
+  const usuarioId = await getMeUsuarioId();
   const nome = String(formData.get('nome') ?? '').trim();
   if (!nome) throw new Error('Informe o nome do projeto');
 
   const clienteIdRaw = String(formData.get('clienteId') ?? '').trim();
   const clienteId = clienteIdRaw ? Number(clienteIdRaw) : null;
 
+  if (clienteId) {
+    const cli = await prisma.clienteUsuario.findFirst({
+      where: { id: clienteId, usuarioId },
+      select: { id: true },
+    });
+    if (!cli) throw new Error('Cliente inválido para este usuário.');
+  }
+
   const novo = await prisma.projeto.create({
-    data: { nome, clienteId: clienteId ?? undefined, status: 'rascunho' },
+    data: { usuarioId, nome, clienteId: clienteId ?? undefined, status: 'rascunho' },
     select: { id: true },
   });
 
@@ -121,22 +139,39 @@ export async function criarProjetoAndGo(formData: FormData) {
   return { id: novo.id };
 }
 
+/** Garante estimativa do projeto pertencente ao usuário */
 export async function ensureEstimativa(projetoId: number): Promise<number> {
-  const e = await prisma.estimativa.findFirst({ where: { projetoId } });
+  const usuarioId = await getMeUsuarioId();
+
+  // projeto precisa ser meu
+  const proj = await prisma.projeto.findFirst({
+    where: { id: projetoId, usuarioId },
+    select: { id: true },
+  });
+  if (!proj) throw new Error('Projeto não pertence ao usuário.');
+
+  const e = await prisma.estimativa.findFirst({
+    where: { projetoId: projetoId, usuarioId },
+    select: { id: true },
+  });
   if (e) return e.id;
 
   const novo = await prisma.estimativa.create({
-    data: { projetoId, nome: 'Estimativa' },
+    data: { usuarioId, projetoId, nome: 'Estimativa' },
+    select: { id: true },
   });
   return novo.id;
 }
 
 export async function aprovarEstimativa(formData: FormData) {
+  const usuarioId = await getMeUsuarioId();
   const estimativaId = Number(formData.get('estimativaId'));
   if (!estimativaId) throw new Error('Estimativa inválida');
 
-  const atual = await prisma.estimativa.findUnique({ where: { id: estimativaId } });
-  if (!atual) throw new Error('Estimativa não encontrada');
+  const atual = await prisma.estimativa.findFirst({
+    where: { id: estimativaId, usuarioId },
+  });
+  if (!atual) throw new Error('Estimativa não encontrada para este usuário.');
 
   await prisma.estimativa.update({
     where: { id: estimativaId },
@@ -156,6 +191,14 @@ export async function adicionarItem(formData: FormData) {
   const estimativaId = Number(formData.get('estimativaId'));
   try {
     const usuarioId = await getMeUsuarioId();
+    if (!estimativaId) throw new Error('Estimativa inválida');
+
+    // valida que a estimativa é do usuário
+    const est = await prisma.estimativa.findFirst({
+      where: { id: estimativaId, usuarioId },
+      select: { id: true, projetoId: true },
+    });
+    if (!est) throw new Error('Estimativa não pertence ao usuário.');
 
     const produtoId    = Number(formData.get('produtoId'));
     const fornecedorId = Number(formData.get('fornecedorId'));
@@ -164,21 +207,22 @@ export async function adicionarItem(formData: FormData) {
     const fontePrecoMo  = (String(formData.get('fontePrecoMo')  || '') || null) as FonteMo;
     const quantidade    = parseNum(formData.get('quantidade'));
 
-    if (!estimativaId || !produtoId || !fornecedorId || !unidadeId)
+    if (!produtoId || !fornecedorId || !unidadeId)
       throw new Error('Produto, fornecedor e unidade são obrigatórios.');
     if (quantidade == null || quantidade <= 0)
       throw new Error('Quantidade inválida.');
 
+    // valida posse dos cadastros
     const [okUM, okProd, okForn] = await Promise.all([
-      prisma.unidadeMedida.findUnique({ where: { id: unidadeId }, select: { id: true } }),
-      prisma.produtoServico.findUnique({ where: { id: produtoId }, select: { id: true } }),
-      prisma.fornecedor.findUnique({ where: { id: fornecedorId }, select: { id: true } }),
+      prisma.unidadeMedida.findFirst({ where: { id: unidadeId, usuarioId }, select: { id: true } }),
+      prisma.produtoServico.findFirst({ where: { id: produtoId, usuarioId }, select: { id: true } }),
+      prisma.fornecedor.findFirst({ where: { id: fornecedorId, usuarioId }, select: { id: true } }),
     ]);
-    if (!okUM)   throw new Error('Unidade de medida não encontrada.');
-    if (!okProd) throw new Error('Produto/serviço não encontrado.');
-    if (!okForn) throw new Error('Fornecedor não encontrado.');
+    if (!okUM)   throw new Error('Unidade de medida não encontrada para este usuário.');
+    if (!okProd) throw new Error('Produto/serviço não encontrado para este usuário.');
+    if (!okForn) throw new Error('Fornecedor não encontrado para este usuário.');
 
-    const { mat, mo } = await pickPrecoFromVinculo(fornecedorId, produtoId, fontePrecoMat, fontePrecoMo);
+    const { mat, mo } = await pickPrecoFromVinculo(usuarioId, fornecedorId, produtoId, fontePrecoMat, fontePrecoMo);
 
     const valorUnitMat = round2(mat);
     const valorUnitMo  = round2(mo);
@@ -200,13 +244,7 @@ export async function adicionarItem(formData: FormData) {
       },
     });
 
-    const projeto = await prisma.estimativa.findUnique({
-      where: { id: estimativaId },
-      select: { projetoId: true },
-    });
-
-    if (projeto?.projetoId)
-      revalidatePath(`/projetos/${projeto.projetoId}/itens`);
+    if (est.projetoId) revalidatePath(`/projetos/${est.projetoId}/itens`);
   } catch (err) {
     console.error('[adicionarItem]', err);
     await backToItensWithError(estimativaId, err);
@@ -216,12 +254,21 @@ export async function adicionarItem(formData: FormData) {
 export async function excluirItem(formData: FormData) {
   const estimativaId = Number(formData.get('estimativaId'));
   try {
+    const usuarioId = await getMeUsuarioId();
     const id = Number(formData.get('id'));
     if (!id || !estimativaId) throw new Error('Item inválido');
 
-    const est = await prisma.estimativa.findUnique({
-      where: { id: estimativaId }, select: { projetoId: true }
+    // valida que o item pertence a uma estimativa do usuário
+    const item = await prisma.estimativaItem.findFirst({
+      where: { id, usuarioId, estimativaId },
+      select: { id: true },
     });
+    if (!item) throw new Error('Item não pertence ao usuário.');
+
+    const est = await prisma.estimativa.findFirst({
+      where: { id: estimativaId, usuarioId }, select: { projetoId: true }
+    });
+
     await prisma.estimativaItem.delete({ where: { id } });
 
     if (est?.projetoId)
@@ -250,16 +297,24 @@ export async function atualizarItem(formData: FormData) {
     if (quantidade == null || quantidade <= 0)
       throw new Error('Quantidade inválida.');
 
-    const [okUM, okProd, okForn] = await Promise.all([
-      prisma.unidadeMedida.findUnique({ where: { id: unidadeId }, select: { id: true } }),
-      prisma.produtoServico.findUnique({ where: { id: produtoId }, select: { id: true } }),
-      prisma.fornecedor.findUnique({ where: { id: fornecedorId }, select: { id: true } }),
-    ]);
-    if (!okUM)   throw new Error('Unidade de medida não encontrada.');
-    if (!okProd) throw new Error('Produto/serviço não encontrado.');
-    if (!okForn) throw new Error('Fornecedor não encontrado.');
+    // valida que a estimativa é do usuário
+    const est = await prisma.estimativa.findFirst({
+      where: { id: estimativaId, usuarioId },
+      select: { projetoId: true },
+    });
+    if (!est) throw new Error('Estimativa não pertence ao usuário.');
 
-    const { mat, mo } = await pickPrecoFromVinculo(fornecedorId, produtoId, fontePrecoMat, fontePrecoMo);
+    // valida posse dos cadastros
+    const [okUM, okProd, okForn] = await Promise.all([
+      prisma.unidadeMedida.findFirst({ where: { id: unidadeId, usuarioId }, select: { id: true } }),
+      prisma.produtoServico.findFirst({ where: { id: produtoId, usuarioId }, select: { id: true } }),
+      prisma.fornecedor.findFirst({ where: { id: fornecedorId, usuarioId }, select: { id: true } }),
+    ]);
+    if (!okUM)   throw new Error('Unidade de medida não encontrada para este usuário.');
+    if (!okProd) throw new Error('Produto/serviço não encontrado para este usuário.');
+    if (!okForn) throw new Error('Fornecedor não encontrado para este usuário.');
+
+    const { mat, mo } = await pickPrecoFromVinculo(usuarioId, fornecedorId, produtoId, fontePrecoMat, fontePrecoMo);
 
     const valorUnitMat = round2(mat);
     const valorUnitMo  = round2(mo);
@@ -280,9 +335,6 @@ export async function atualizarItem(formData: FormData) {
       },
     });
 
-    const est = await prisma.estimativa.findUnique({
-      where: { id: estimativaId }, select: { projetoId: true }
-    });
     if (est?.projetoId)
       revalidatePath(`/projetos/${est.projetoId}/itens`);
   } catch (err) {
