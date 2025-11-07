@@ -17,6 +17,51 @@ async function meId() {
   return me.id;
 }
 
+/** Criar projeto + 1ª estimativa e IR PARA ITENS */
+export async function criarProjetoAndGo(formData: FormData) {
+  const usuarioId = await meId();
+
+  const nome = String(formData.get('nome') ?? '').trim();
+  const clienteIdRaw = String(formData.get('clienteId') ?? '').trim();
+  const clienteId = clienteIdRaw ? Number(clienteIdRaw) : null;
+
+  if (!nome) throw new Error('Nome do projeto é obrigatório.');
+
+  // valida cliente (se veio) e se pertence ao mesmo usuarioId
+  if (clienteId) {
+    const cli = await prisma.clienteUsuario.findUnique({
+      where: { id: clienteId },
+      select: { usuarioId: true },
+    });
+    if (!cli || cli.usuarioId !== usuarioId) {
+      throw new Error('Cliente inválido para este usuário.');
+    }
+  }
+
+  // cria projeto scoped por usuario
+  const projeto = await prisma.projeto.create({
+    data: {
+      usuarioId,
+      nome,
+      status: 'rascunho',
+      ...(clienteId ? { clienteId } : {}),
+    },
+    select: { id: true },
+  });
+
+  // garante 1ª estimativa
+  await prisma.estimativa.create({
+    data: {
+      usuarioId,
+      projetoId: projeto.id,
+      nome: 'Estimativa V1',
+    },
+  });
+
+  // não precisamos revalidar /projetos, vamos direto aos itens
+  redirect(`/projetos/${projeto.id}/itens`);
+}
+
 /** Atualizar nome/status/cliente (scoped por usuário) */
 export async function atualizarProjeto(formData: FormData) {
   const usuarioId = await meId();
