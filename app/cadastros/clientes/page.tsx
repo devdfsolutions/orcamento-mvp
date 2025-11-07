@@ -123,8 +123,8 @@ export default async function Page({ searchParams }: PageProps) {
             <colgroup>
               <col style={{ width: "56px" }} />      {/* ID */}
               <col style={{ width: "22%" }} />       {/* Nome */}
-              <col style={{ width: "12%" }} />       {/* CPF */}
-              <col style={{ width: "14%" }} />       {/* CNPJ */}
+              <col style={{ width: "15%" }} />       {/* CPF */}
+              <col style={{ width: "18%" }} />       {/* CNPJ */}
               <col style={{ width: "18%" }} />       {/* E-mail */}
               <col style={{ width: "12%" }} />       {/* Telefone */}
               <col />                                 {/* Endereço (flex) */}
