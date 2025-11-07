@@ -85,7 +85,7 @@ export default async function Page({ searchParams }: PageProps) {
           <PendingOverlay />
 
           <PendingFieldset>
-            <input type="hidden" name="usuarioId" value={me.id} />
+            {/* REMOVIDO: <input type="hidden" name="usuarioId" value={me.id} /> */}
 
             <input name="nome" placeholder="Nome" required className="input" />
 
