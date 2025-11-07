@@ -23,24 +23,39 @@ type Props = { params: { id: string }; searchParams?: { e?: string } };
 
 export default async function Page({ params, searchParams }: Props) {
   const supabase = await getSupabaseServer();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
+
+  // quem sou
+  const me = await prisma.usuario.findUnique({
+    where: { supabaseUserId: user.id },
+    select: { id: true },
+  });
+  if (!me) redirect('/login');
 
   const projetoId = Number(params.id);
 
-  // Garante 1 estimativa
+  // Projeto PRECISA ser meu
+  const projeto = await prisma.projeto.findFirst({
+    where: { id: projetoId, usuarioId: me.id },
+    include: { cliente: true },
+  });
+  if (!projeto) redirect('/projetos'); // evita vazar info
+
+  // Garante 1 estimativa (valida posse internamente)
   const estimativaId = await ensureEstimativa(projetoId);
 
-  // Dados do cabeçalho + selects + itens
-  const [projeto, unidades, fornecedores, produtos, est] = await Promise.all([
-    prisma.projeto.findUnique({ where: { id: projetoId }, include: { cliente: true } }),
-    prisma.unidadeMedida.findMany({ orderBy: { sigla: 'asc' } }),
-    prisma.fornecedor.findMany({ orderBy: { nome: 'asc' } }),
-    prisma.produtoServico.findMany({ orderBy: { nome: 'asc' }, include: { unidade: true } }),
-    prisma.estimativa.findUnique({
-      where: { id: estimativaId },
+  // Dados do cabeçalho + selects + itens (todos filtrados por usuarioId)
+  const [unidades, fornecedores, produtos, est] = await Promise.all([
+    prisma.unidadeMedida.findMany({ where: { usuarioId: me.id }, orderBy: { sigla: 'asc' } }),
+    prisma.fornecedor.findMany({ where: { usuarioId: me.id }, orderBy: { nome: 'asc' } }),
+    prisma.produtoServico.findMany({
+      where: { usuarioId: me.id },
+      orderBy: { nome: 'asc' },
+      include: { unidade: true },
+    }),
+    prisma.estimativa.findFirst({
+      where: { id: estimativaId, usuarioId: me.id },
       include: {
         itens: {
           include: { produto: true, unidade: true, fornecedor: true },
@@ -79,11 +94,11 @@ export default async function Page({ params, searchParams }: Props) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'grid', gap: 4 }}>
           <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>
-            Projeto #{projeto?.id} / Orçamento
+            Projeto #{projeto.id} / Orçamento
           </h1>
           <div style={{ color: '#555' }}>
-            {projeto?.nome ? <b>{projeto.nome}</b> : <i>Sem nome</i>}
-            {projeto?.cliente ? (
+            {projeto.nome ? <b>{projeto.nome}</b> : <i>Sem nome</i>}
+            {projeto.cliente ? (
               <span>
                 {' '}
                 — Cliente: <b>{projeto.cliente.nome}</b>
@@ -114,7 +129,7 @@ export default async function Page({ params, searchParams }: Props) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
           <b>Estimativa V1</b>
           <span style={{ color: '#777' }}>
-            Criada em {new Date(est!.criadaEm).toLocaleDateString('pt-BR')}
+            Criada em {est ? new Date(est.criadaEm).toLocaleDateString('pt-BR') : '--/--/----'}
           </span>
           <span
             style={{
