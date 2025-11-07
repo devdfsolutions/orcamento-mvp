@@ -174,11 +174,53 @@ export default async function Page() {
 }
 
 /* estilos */
-const card: React.CSSProperties = { padding: 12, border: '1px solid '#eee', borderRadius: 8, background: '#fff' };
+const card: React.CSSProperties = {
+  padding: 12,
+  border: '1px solid #eee',
+  borderRadius: 8,
+  background: '#fff',
+};
 const h2: React.CSSProperties = { fontSize: 16, margin: '0 0 10px' };
-const th: React.CSSProperties = { textAlign: 'left', padding: 10, borderBottom: '1px solid #eee', background: '#fafafa', fontWeight: 600 };
+const th: React.CSSProperties = {
+  textAlign: 'left',
+  padding: 10,
+  borderBottom: '1px solid #eee',
+  background: '#fafafa',
+  fontWeight: 600,
+};
 const td: React.CSSProperties = { padding: 10, borderBottom: '1px solid #f2f2f2' };
-const input: React.CSSProperties = { height: 36, padding: '0 10px', border: '1px solid #ddd', borderRadius: 8, outline: 'none', minWidth: 220 };
-const btn: React.CSSProperties = { height: 36, padding: '0 14px', borderRadius: 8, border: '1px solid #ddd', background: '#111', color: '#fff', cursor: 'pointer' };
-const linkBtn: React.CSSProperties = { display: 'inline-block', padding: '8px 12px', border: '1px solid #ddd', borderRadius: 8, background: '#f8f8f8', textDecoration: 'none', color: '#111' };
-const dangerBtn: React.CSSProperties = { height: 30, padding: '0 10px', borderRadius: 8, border: '1px solid #f1d0d0', background: '#ffeaea', color: '#b40000', cursor: 'pointer' };
+const input: React.CSSProperties = {
+  height: 36,
+  padding: '0 10px',
+  border: '1px solid #ddd',
+  borderRadius: 8,
+  outline: 'none',
+  minWidth: 220,
+};
+const btn: React.CSSProperties = {
+  height: 36,
+  padding: '0 14px',
+  borderRadius: 8,
+  border: '1px solid #ddd',
+  background: '#111',
+  color: '#fff',
+  cursor: 'pointer',
+};
+const linkBtn: React.CSSProperties = {
+  display: 'inline-block',
+  padding: '8px 12px',
+  border: '1px solid #ddd',
+  borderRadius: 8,
+  background: '#f8f8f8',
+  textDecoration: 'none',
+  color: '#111',
+};
+const dangerBtn: React.CSSProperties = {
+  height: 30,
+  padding: '0 10px',
+  borderRadius: 8,
+  border: '1px solid #f1d0d0',
+  background: '#ffeaea',
+  color: '#b40000',
+  cursor: 'pointer',
+};
