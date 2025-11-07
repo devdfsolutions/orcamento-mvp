@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/prisma';
+import { getSupabaseServer } from '@/lib/supabaseServer';
 
 /* ===== helpers ===== */
 const onlyDigits = (s: string) => s.replace(/\D+/g, '');
@@ -9,6 +10,18 @@ const onlyDigits = (s: string) => s.replace(/\D+/g, '');
 function normStr(v: FormDataEntryValue | null): string | null {
   const s = String(v ?? '').trim();
   return s ? s : null;
+}
+
+async function meId() {
+  const supabase = await getSupabaseServer();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Não autenticado.');
+  const me = await prisma.usuario.findUnique({
+    where: { supabaseUserId: user.id },
+    select: { id: true },
+  });
+  if (!me) throw new Error('Usuário não encontrado.');
+  return me.id;
 }
 
 /** cria/atualiza SEM pontuação no CPF/CNPJ (guardamos só dígitos) */
@@ -30,11 +43,11 @@ function normalizeCpfCnpjEmailTelefone(payload: {
 
 /* ===== ACTIONS ===== */
 
-/** Criar cliente do usuário logado (usuarioId vem do formulário hidden) */
 export async function criarClienteUsuario(formData: FormData) {
-  const usuarioId = Number(formData.get('usuarioId'));
+  const usuarioId = await meId();
+
   const nome = String(formData.get('nome') ?? '').trim();
-  if (!usuarioId || !nome) throw new Error('Usuário inválido ou nome obrigatório.');
+  if (!nome) throw new Error('Usuário inválido ou nome obrigatório.');
 
   const cpf  = normStr(formData.get('cpf'));
   const cnpj = normStr(formData.get('cnpj'));
@@ -59,8 +72,9 @@ export async function criarClienteUsuario(formData: FormData) {
   revalidatePath('/cadastros/clientes');
 }
 
-/** Atualizar cliente do usuário (não muda o usuarioId) */
 export async function atualizarClienteUsuario(formData: FormData) {
+  const usuarioId = await meId();
+
   const id = Number(formData.get('id'));
   if (!id) throw new Error('ID inválido.');
 
@@ -75,8 +89,8 @@ export async function atualizarClienteUsuario(formData: FormData) {
 
   const norm = normalizeCpfCnpjEmailTelefone({ cpf, cnpj, email, telefone });
 
-  await prisma.clienteUsuario.update({
-    where: { id },
+  await prisma.clienteUsuario.updateMany({
+    where: { id, usuarioId },
     data: {
       nome,
       cpf: norm.cpf ?? null,
@@ -90,12 +104,13 @@ export async function atualizarClienteUsuario(formData: FormData) {
   revalidatePath('/cadastros/clientes');
 }
 
-/** Excluir cliente (soft-checks como uso em projetos você pode colocar depois) */
 export async function excluirClienteUsuario(formData: FormData) {
+  const usuarioId = await meId();
+
   const id = Number(formData.get('id'));
   if (!id) throw new Error('ID inválido.');
 
-  await prisma.clienteUsuario.delete({ where: { id } });
+  await prisma.clienteUsuario.deleteMany({ where: { id, usuarioId } });
 
   revalidatePath('/cadastros/clientes');
 }
