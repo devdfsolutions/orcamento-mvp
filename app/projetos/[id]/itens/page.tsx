@@ -1,10 +1,11 @@
+// app/projetos/[id]/itens/page.tsx
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 export const runtime = 'nodejs';
 
 import { prisma } from '@/lib/prisma';
 import { getSupabaseServer } from '@/lib/supabaseServer';
-import { redirect } from 'next/navigation';
+import { redirect, notFound } from 'next/navigation';
 import {
   ensureEstimativa,
   excluirItem,
@@ -25,7 +26,7 @@ export default async function Page({ params, searchParams }: Props) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  // resolve "me"
+  // resolve meu usuario interno
   const me = await prisma.usuario.findUnique({
     where: { supabaseUserId: user.id },
     select: { id: true },
@@ -33,18 +34,19 @@ export default async function Page({ params, searchParams }: Props) {
   if (!me) redirect('/login');
 
   const projetoId = Number(params.id);
+  if (!Number.isFinite(projetoId)) notFound();
 
-  // projeto precisa ser meu
+  // valida que o projeto é MEU
   const projeto = await prisma.projeto.findFirst({
     where: { id: projetoId, usuarioId: me.id },
     include: { cliente: true },
   });
-  if (!projeto) redirect('/projetos'); // ou 404
+  if (!projeto) notFound();
 
-  // Garante 1 estimativa (do projeto)
-  const estimativaId = await ensureEstimativa(projeto.id);
+  // Garante 1 estimativa (SEGURA: só cria se o projeto é meu)
+  const estimativaId = await ensureEstimativa(projetoId, me.id);
 
-  // Dados (TODOS filtrados por usuarioId)
+  // Dados do combo/select APENAS do meu usuário
   const [unidades, fornecedores, produtos, est] = await Promise.all([
     prisma.unidadeMedida.findMany({
       where: { usuarioId: me.id },
@@ -59,10 +61,11 @@ export default async function Page({ params, searchParams }: Props) {
       orderBy: { nome: 'asc' },
       include: { unidade: true },
     }),
-    prisma.estimativa.findUnique({
-      where: { id: estimativaId },
+    prisma.estimativa.findFirst({
+      where: { id: estimativaId, usuarioId: me.id, projetoId },
       include: {
         itens: {
+          where: { usuarioId: me.id },
           include: { produto: true, unidade: true, fornecedor: true },
           orderBy: { id: 'asc' },
         },
@@ -73,6 +76,7 @@ export default async function Page({ params, searchParams }: Props) {
   const itens = est?.itens ?? [];
   const total = itens.reduce((acc, i) => acc + Number(i.totalItem || 0), 0);
 
+  // Mensagem de erro vinda das server actions (via redirect ?e=...)
   const errorMsg =
     searchParams?.e && searchParams.e !== 'NEXT_REDIRECT'
       ? decodeURIComponent(searchParams.e)
@@ -103,20 +107,26 @@ export default async function Page({ params, searchParams }: Props) {
           <div style={{ color: '#555' }}>
             {projeto.nome ? <b>{projeto.nome}</b> : <i>Sem nome</i>}
             {projeto.cliente ? (
-              <span> — Cliente: <b>{projeto.cliente.nome}</b></span>
+              <span>
+                {' '}
+                — Cliente: <b>{projeto.cliente.nome}</b>
+              </span>
             ) : (
-              <span> — Cliente: <i>não vinculado</i></span>
+              <span>
+                {' '}
+                — Cliente: <i>não vinculado</i>
+              </span>
             )}
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <a href={`/projetos/${projeto.id}/orcamento/imprimir`} style={linkBtn}>
+          <a href={`/projetos/${projetoId}/orcamento/imprimir`} style={linkBtn}>
             Imprimir / PDF
           </a>
-          <a href={`/projetos/${projeto.id}/estimativas`} style={linkBtn}>
+          <a href={`/projetos/${projetoId}/estimativas`} style={linkBtn}>
             Resumo aprovado
           </a>
-          <a href={`/projetos/${projeto.id}/financeiro`} style={linkBtn}>
+          <a href={`/projetos/${projetoId}/financeiro`} style={linkBtn}>
             Financeiro
           </a>
         </div>
@@ -127,7 +137,7 @@ export default async function Page({ params, searchParams }: Props) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
           <b>Estimativa V1</b>
           <span style={{ color: '#777' }}>
-            Criada em {new Date(est!.criadaEm).toLocaleDateString('pt-BR')}
+            Criada em {est ? new Date(est.criadaEm).toLocaleDateString('pt-BR') : '—'}
           </span>
           <span
             style={{
@@ -326,7 +336,7 @@ const td: React.CSSProperties = {
 const input: React.CSSProperties = {
   height: 36,
   padding: '0 10px',
-  border: '1px solid #ddd',
+  border: '1px solid '#ddd',
   borderRadius: 8,
   outline: 'none',
   width: '100%',
