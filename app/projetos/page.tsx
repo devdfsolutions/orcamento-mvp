@@ -1,4 +1,3 @@
-// app/projetos/page.tsx
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 export const runtime = 'nodejs';
@@ -7,8 +6,7 @@ import ConfirmSubmit from '@/components/ConfirmSubmit';
 import { prisma } from '@/lib/prisma';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 import { redirect } from 'next/navigation';
-import { criarProjeto } from '@/actions/estimativas';
-import { excluirProjeto, excluirProjetosEmLote } from '@/actions/projetos';
+import { criarProjetoAndGo, excluirProjeto, excluirProjetosEmLote } from '@/actions/projetos';
 
 export default async function Page() {
   // Auth
@@ -51,11 +49,11 @@ export default async function Page() {
     <main style={{ padding: 24, display: 'grid', gap: 16, maxWidth: 1000 }}>
       <h1 style={{ fontSize: 22, fontWeight: 700 }}>Projetos</h1>
 
-      {/* Criar rápido */}
+      {/* Criar e ir para itens (um único botão) */}
       <section style={card}>
         <h2 style={h2}>Novo projeto</h2>
         <form
-          action={criarProjeto}
+          action={criarProjetoAndGo}
           style={{
             display: 'grid',
             gap: 8,
@@ -72,14 +70,8 @@ export default async function Page() {
             ))}
           </select>
 
-          <button style={btn}>Salvar</button>
+          <button style={btn}>Criar projeto</button>
         </form>
-
-        <div style={{ marginTop: 8 }}>
-          <a href="/projetos/novo" style={linkBtn}>
-            Criar projeto no modo assistido →
-          </a>
-        </div>
       </section>
 
       {/* Lista + Exclusão em lote */}
@@ -182,7 +174,7 @@ export default async function Page() {
 }
 
 /* estilos */
-const card: React.CSSProperties = { padding: 12, border: '1px solid #eee', borderRadius: 8, background: '#fff' };
+const card: React.CSSProperties = { padding: 12, border: '1px solid '#eee', borderRadius: 8, background: '#fff' };
 const h2: React.CSSProperties = { fontSize: 16, margin: '0 0 10px' };
 const th: React.CSSProperties = { textAlign: 'left', padding: 10, borderBottom: '1px solid #eee', background: '#fafafa', fontWeight: 600 };
 const td: React.CSSProperties = { padding: 10, borderBottom: '1px solid #f2f2f2' };
