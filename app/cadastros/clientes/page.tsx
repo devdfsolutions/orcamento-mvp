@@ -122,11 +122,11 @@ export default async function Page({ searchParams }: PageProps) {
           <table className="table w-full">
             <colgroup>
               <col style={{ width: "56px" }} /> {/* ID */}
-              <col style={{ width: "16%" }} /> {/* Nome */}
-              <col style={{ width: "14%" }} /> {/* CPF */}
-              <col style={{ width: "12%" }} /> {/* CNPJ */}
-              <col style={{ width: "25%" }} /> {/* e-mail */}
-              <col style={{ width: "12%" }} /> {/* telefone */}
+              <col style={{ width: "35%" }} /> {/* Nome */}
+              <col style={{ width: "20%" }} /> {/* CPF */}
+              <col style={{ width: "25%" }} /> {/* CNPJ */}
+              <col style={{ width: "30%" }} /> {/* e-mail */}
+              <col style={{ width: "20%" }} /> {/* telefone */}
               <col style={{ width: "35%" }} /> {/* endereço */}
               <col style={{ width: "110px" }} /> {/* ações */}
             </colgroup>
