@@ -121,14 +121,14 @@ export default async function Page({ searchParams }: PageProps) {
         <div className="table-wrap">
           <table className="table w-full">
             <colgroup>
-              <col style={{ width: "56px" }} /> {/* ID */}
-              <col style={{ width: "80%" }} /> {/* Nome */}
-              <col style={{ width: "80%" }} /> {/* CPF */}
-              <col style={{ width: "90%" }} /> {/* CNPJ */}
-              <col style={{ width: "90%" }} /> {/* e-mail */}
-              <col style={{ width: "80%" }} /> {/* telefone */}
-              <col style={{ width: "80%" }} /> {/* endereço */}
-              <col style={{ width: "110px" }} /> {/* ações */}
+              <col style={{ width: "56px" }} />      {/* ID */}
+              <col style={{ width: "22%" }} />       {/* Nome */}
+              <col style={{ width: "12%" }} />       {/* CPF */}
+              <col style={{ width: "14%" }} />       {/* CNPJ */}
+              <col style={{ width: "18%" }} />       {/* E-mail */}
+              <col style={{ width: "12%" }} />       {/* Telefone */}
+              <col />                                 {/* Endereço (flex) */}
+              <col style={{ width: "110px" }} />     {/* Ações */}
             </colgroup>
 
             <thead>
@@ -215,7 +215,7 @@ export default async function Page({ searchParams }: PageProps) {
           </table>
         </div>
 
-        {/* estilos compactos + anti-overflow + tokens + btn/spinner herdados */}
+        {/* estilos compactos + sem “…” (permite quebra) */}
         <style>{`
           :root{
             --bg:#fff; --border:#e6e7eb; --muted:#f7f7fb;
@@ -252,7 +252,7 @@ export default async function Page({ searchParams }: PageProps) {
           }
           .table tbody td{
             padding:10px 12px; border-bottom:1px solid var(--border); vertical-align:middle; color:var(--text);
-            overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+            overflow:visible; text-overflow:initial; white-space:normal; word-break:break-word; overflow-wrap:anywhere;
           }
           .table tbody tr:hover td{ background:#fafafa; }
 
