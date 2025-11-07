@@ -1,4 +1,3 @@
-// app/projetos/[id]/estimativas/page.tsx
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 export const runtime = "nodejs";
@@ -36,7 +35,7 @@ export default async function Page({ params }: Props) {
   if (!projeto) redirect('/projetos');
 
   const estimativa = await prisma.estimativa.findFirst({
-    where: { projetoId, usuarioId: me.id, aprovada: true },
+    where: { projetoId: projeto.id, aprovada: true },
     include: {
       itens: {
         include: {
