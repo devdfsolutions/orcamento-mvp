@@ -23,15 +23,17 @@ type Props = { params: { id: string }; searchParams?: { e?: string } };
 
 export default async function Page({ params, searchParams }: Props) {
   const supabase = await getSupabaseServer();
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
   const projetoId = Number(params.id);
 
-  // Garante 1 estimativa (se não existir, cria e retorna o id)
+  // Garante 1 estimativa (cria se não existir)
   const estimativaId = await ensureEstimativa(projetoId);
 
-  // Dados do cabeçalho + selects + itens
+  // Busca dados principais
   const [projeto, unidades, fornecedores, produtos, est] = await Promise.all([
     prisma.projeto.findUnique({ where: { id: projetoId }, include: { cliente: true } }),
     prisma.unidadeMedida.findMany({ orderBy: { sigla: 'asc' } }),
@@ -48,15 +50,12 @@ export default async function Page({ params, searchParams }: Props) {
     }),
   ]);
 
-  // ----- SAFETY: trata possíveis nulos -----
   const itens = est?.itens ?? [];
   const total = itens.reduce((acc, i) => acc + Number(i.totalItem || 0), 0);
   const criadaEmStr = est?.criadaEm
     ? new Date(est.criadaEm).toLocaleDateString('pt-BR')
     : '—';
-  // ----------------------------------------
 
-  // Mensagem de erro vinda das server actions (via redirect ?e=...)
   const errorMsg =
     searchParams?.e && searchParams.e !== 'NEXT_REDIRECT'
       ? decodeURIComponent(searchParams.e)
@@ -131,7 +130,6 @@ export default async function Page({ params, searchParams }: Props) {
           </form>
         </div>
 
-        {/* Form inteligente para adicionar item */}
         <ItemSmartAdd
           estimativaId={estimativaId}
           produtos={produtos.map((p) => ({
@@ -290,7 +288,7 @@ export default async function Page({ params, searchParams }: Props) {
 /* ===== estilos ===== */
 const card: React.CSSProperties = {
   padding: 12,
-  border: '1px solid '#eee',
+  border: '1px solid #eee',
   borderRadius: 8,
   background: '#fff',
 };
