@@ -13,7 +13,7 @@ import {
   atualizarItem,
 } from '@/actions/estimativas';
 import AutoCloseForm from '@/components/AutoCloseForm';
-import ItemSmartAdd from '@/components/ItemSmartAdd';
+import ToggleRowEditing from '@/components/ToggleRowEditing';
 
 /* ===== helpers ===== */
 const money = (v: any) =>
@@ -23,22 +23,25 @@ type Props = { params: { id: string }; searchParams?: { e?: string } };
 
 export default async function Page({ params, searchParams }: Props) {
   const supabase = await getSupabaseServer();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
   const projetoId = Number(params.id);
 
-  // Garante 1 estimativa (cria se não existir)
+  // resolve projeto (exibe cliente/nome)
+  const projeto = await prisma.projeto.findUnique({
+    where: { id: projetoId },
+    include: { cliente: true },
+  });
+  if (!projeto) redirect('/projetos');
+
+  // garante 1 estimativa do projeto
   const estimativaId = await ensureEstimativa(projetoId);
 
-  // Busca dados principais
-  const [projeto, unidades, fornecedores, produtos, est] = await Promise.all([
-    prisma.projeto.findUnique({ where: { id: projetoId }, include: { cliente: true } }),
-    prisma.unidadeMedida.findMany({ orderBy: { sigla: 'asc' } }),
-    prisma.fornecedor.findMany({ orderBy: { nome: 'asc' } }),
-    prisma.produtoServico.findMany({ orderBy: { nome: 'asc' }, include: { unidade: true } }),
+  // dados para selects e lista de itens
+  const [unidades, fornecedores, est] = await Promise.all([
+    prisma.unidadeMedida.findMany({ where: { usuarioId: projeto.usuarioId }, orderBy: { sigla: 'asc' } }),
+    prisma.fornecedor.findMany({ where: { usuarioId: projeto.usuarioId }, orderBy: { nome: 'asc' } }),
     prisma.estimativa.findUnique({
       where: { id: estimativaId },
       include: {
@@ -52,9 +55,6 @@ export default async function Page({ params, searchParams }: Props) {
 
   const itens = est?.itens ?? [];
   const total = itens.reduce((acc, i) => acc + Number(i.totalItem || 0), 0);
-  const criadaEmStr = est?.criadaEm
-    ? new Date(est.criadaEm).toLocaleDateString('pt-BR')
-    : '—';
 
   const errorMsg =
     searchParams?.e && searchParams.e !== 'NEXT_REDIRECT'
@@ -62,7 +62,7 @@ export default async function Page({ params, searchParams }: Props) {
       : null;
 
   return (
-    <main style={{ padding: 24, display: 'grid', gap: 16, maxWidth: 1100 }}>
+    <main className="mx-auto grid gap-4" style={{ padding: 24, maxWidth: 1100 }}>
       {errorMsg && (
         <div
           style={{
@@ -81,35 +81,32 @@ export default async function Page({ params, searchParams }: Props) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'grid', gap: 4 }}>
           <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>
-            Projeto #{projeto?.id} / Orçamento
+            Projeto #{projeto.id} / Orçamento
           </h1>
           <div style={{ color: '#555' }}>
-            {projeto?.nome ? <b>{projeto.nome}</b> : <i>Sem nome</i>}
-            {projeto?.cliente ? (
+            {projeto.nome ? <b>{projeto.nome}</b> : <i>Sem nome</i>}
+            {projeto.cliente ? (
               <span> — Cliente: <b>{projeto.cliente.nome}</b></span>
             ) : (
               <span> — Cliente: <i>não vinculado</i></span>
             )}
           </div>
         </div>
+
         <div style={{ display: 'flex', gap: 8 }}>
-          <a href={`/projetos/${projetoId}/orcamento/imprimir`} style={linkBtn}>
-            Imprimir / PDF
-          </a>
-          <a href={`/projetos/${projetoId}/estimativas`} style={linkBtn}>
-            Resumo aprovado
-          </a>
-          <a href={`/projetos/${projetoId}/financeiro`} style={linkBtn}>
-            Financeiro
-          </a>
+          <a href={`/projetos/${projeto.id}/orcamento/imprimir`} className="btn btn-sm">Imprimir / PDF</a>
+          <a href={`/projetos/${projeto.id}/estimativas`} className="btn btn-sm">Resumo aprovado</a>
+          <a href={`/projetos/${projeto.id}/financeiro`} className="btn btn-sm">Financeiro</a>
         </div>
       </div>
 
-      {/* Barra de status + Aprovar/Desaprovar + Adicionar item (smart) */}
-      <section style={card}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+      {/* Barra status + aprovar */}
+      <section className="card">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <b>Estimativa V1</b>
-          <span style={{ color: '#777' }}>Criada em {criadaEmStr}</span>
+          <span style={{ color: '#777' }}>
+            Criada em {new Date(est!.criadaEm).toLocaleDateString('pt-BR')}
+          </span>
           <span
             style={{
               marginLeft: 8,
@@ -126,225 +123,226 @@ export default async function Page({ params, searchParams }: Props) {
 
           <form action={aprovarEstimativa} style={{ marginLeft: 'auto' }}>
             <input type="hidden" name="estimativaId" value={estimativaId} />
-            <button style={btn}>{est?.aprovada ? 'Desaprovar' : 'Aprovar'}</button>
+            <button className="btn">{est?.aprovada ? 'Desaprovar' : 'Aprovar'}</button>
           </form>
         </div>
-
-        <ItemSmartAdd
-          estimativaId={estimativaId}
-          produtos={produtos.map((p) => ({
-            id: p.id,
-            nome: p.nome,
-            unidade: p.unidade ? { id: p.unidade.id, sigla: p.unidade.sigla } : undefined,
-          }))}
-          unidades={unidades.map((u) => ({ id: u.id, sigla: u.sigla }))}
-        />
       </section>
 
-      {/* LISTA */}
-      <section>
-        <table style={{ width: '100%', borderCollapse: 'collapse', background: '#fff' }}>
-          <thead>
-            <tr style={{ background: '#f6f6f6' }}>
-              <th style={th}>Produto/Serviço</th>
-              <th style={th}>Fornecedor</th>
-              <th style={th}>Qtd</th>
-              <th style={th}>UM</th>
-              <th style={{ ...th, textAlign: 'right' }}>Unit. Materiais</th>
-              <th style={{ ...th, textAlign: 'right' }}>Unit. Mão de Obra</th>
-              <th style={{ ...th, textAlign: 'right' }}>Total do item</th>
-              <th style={th}>Editar</th>
-              <th style={th}></th>
-            </tr>
-          </thead>
-          <tbody>
-            {itens.map((i) => (
-              <tr key={i.id}>
-                <td style={td}>{i.produto.nome}</td>
-                <td style={td}>{i.fornecedor.nome}</td>
-                <td style={td}>{Number(i.quantidade).toLocaleString('pt-BR')}</td>
-                <td style={td}>{i.unidade.sigla}</td>
-                <td style={{ ...td, textAlign: 'right' }}>
-                  {i.valorUnitMat == null ? '—' : money(i.valorUnitMat)}
-                </td>
-                <td style={{ ...td, textAlign: 'right' }}>
-                  {i.valorUnitMo == null ? '—' : money(i.valorUnitMo)}
-                </td>
-                <td style={{ ...td, textAlign: 'right', fontWeight: 600 }}>{money(i.totalItem)}</td>
+      {/* LISTA (edição inline por linha) */}
+      <section className="card p-0 overflow-hidden">
+        <div className="table-wrap">
+          <table className="table w-full">
+            <colgroup>
+              <col />                       {/* Produto */}
+              <col style={{ width: '22%' }} />  {/* Fornecedor */}
+              <col style={{ width: 80 }} />     {/* Qtd */}
+              <col style={{ width: 90 }} />     {/* UM */}
+              <col style={{ width: 130 }} />    {/* Unit Mat */}
+              <col style={{ width: 130 }} />    {/* Unit MO */}
+              <col style={{ width: 130 }} />    {/* Total */}
+              <col style={{ width: 160 }} />    {/* Editar */}
+              <col style={{ width: 110 }} />    {/* Excluir */}
+            </colgroup>
 
-                {/* EDITAR inline */}
-                <td style={{ ...td, whiteSpace: 'nowrap' }}>
-                  <details>
-                    <summary style={linkBtn}>Editar</summary>
-                    <div style={{ paddingTop: 8 }}>
-                      <AutoCloseForm
-                        action={atualizarItem}
-                        style={{
-                          display: 'grid',
-                          gap: 8,
-                          gridTemplateColumns: '2fr 2fr 100px 120px 1fr 1fr',
-                          maxWidth: 950,
-                        }}
+            <thead>
+              <tr>
+                {['Produto/Serviço','Fornecedor','Qtd','UM','Unit. Materiais','Unit. Mão de Obra','Total do item','Editar','']
+                  .map((h)=> <th key={h}>{h}</th>)}
+              </tr>
+            </thead>
+
+            <tbody>
+              {itens.map((i) => {
+                const rowId = `row-${i.id}`;
+                const detailsId = `det-${i.id}`;
+                const formId = `edit-${i.id}`;
+
+                return (
+                  <tr key={i.id} id={rowId}>
+                    {/* Produto (não editamos aqui) */}
+                    <td>
+                      <span className="cell-view font-medium text-zinc-900">{i.produto.nome}</span>
+                    </td>
+
+                    {/* Fornecedor */}
+                    <td>
+                      <span className="cell-view">{i.fornecedor.nome}</span>
+                      <select
+                        form={formId}
+                        name="fornecedorId"
+                        defaultValue={String(i.fornecedorId)}
+                        className="cell-edit input input-sm w-full"
+                        required
                       >
+                        {fornecedores.map((f) => (
+                          <option key={f.id} value={f.id}>{f.nome}</option>
+                        ))}
+                      </select>
+                    </td>
+
+                    {/* Quantidade */}
+                    <td>
+                      <span className="cell-view">{Number(i.quantidade).toLocaleString('pt-BR')}</span>
+                      <input
+                        form={formId}
+                        name="quantidade"
+                        defaultValue={String(i.quantidade)}
+                        inputMode="decimal"
+                        className="cell-edit input input-sm w-full"
+                      />
+                    </td>
+
+                    {/* UM */}
+                    <td>
+                      <span className="cell-view">{i.unidade.sigla}</span>
+                      <select
+                        form={formId}
+                        name="unidadeId"
+                        defaultValue={String(i.unidadeId)}
+                        className="cell-edit input input-sm w-full"
+                        required
+                      >
+                        {unidades.map((u)=>(
+                          <option key={u.id} value={u.id}>{u.sigla}</option>
+                        ))}
+                      </select>
+                    </td>
+
+                    {/* Unit Mat */}
+                    <td className="text-right">
+                      <span className="cell-view">
+                        {i.valorUnitMat == null ? '—' : money(i.valorUnitMat)}
+                      </span>
+                      <select
+                        form={formId}
+                        name="fontePrecoMat"
+                        defaultValue={i.fontePrecoMat ?? ''}
+                        className="cell-edit input input-sm w-full"
+                      >
+                        <option value="">Mat: —</option>
+                        <option value="P1">P1</option>
+                        <option value="P2">P2</option>
+                        <option value="P3">P3</option>
+                      </select>
+                    </td>
+
+                    {/* Unit MO */}
+                    <td className="text-right">
+                      <span className="cell-view">
+                        {i.valorUnitMo == null ? '—' : money(i.valorUnitMo)}
+                      </span>
+                      <select
+                        form={formId}
+                        name="fontePrecoMo"
+                        defaultValue={i.fontePrecoMo ?? ''}
+                        className="cell-edit input input-sm w-full"
+                      >
+                        <option value="">MO: —</option>
+                        <option value="M1">M1</option>
+                        <option value="M2">M2</option>
+                        <option value="M3">M3</option>
+                      </select>
+                    </td>
+
+                    {/* Total */}
+                    <td className="text-right">
+                      <span className="cell-view" style={{ fontWeight: 600 }}>{money(i.totalItem)}</span>
+                    </td>
+
+                    {/* Ações – Editar/Salvar */}
+                    <td className="text-right whitespace-nowrap">
+                      <details id={detailsId} className="inline-block mr-2 align-middle">
+                        <summary className="pill">Editar</summary>
+                      </details>
+
+                      <button
+                        type="submit"
+                        form={formId}
+                        className="btn btn-primary btn-sm save-btn align-middle"
+                      >
+                        Salvar
+                      </button>
+
+                      {/* form oculto que recebe inputs via atributo `form` */}
+                      <AutoCloseForm id={formId} action={atualizarItem} className="hidden">
                         <input type="hidden" name="id" value={i.id} />
                         <input type="hidden" name="estimativaId" value={estimativaId} />
                         <input type="hidden" name="produtoId" value={i.produtoId} />
-
-                        <select
-                          name="fornecedorId"
-                          defaultValue={String(i.fornecedorId)}
-                          required
-                          style={input}
-                        >
-                          {fornecedores.map((f) => (
-                            <option key={f.id} value={f.id}>
-                              {f.nome}
-                            </option>
-                          ))}
-                        </select>
-
-                        <select
-                          name="unidadeId"
-                          defaultValue={String(i.unidadeId)}
-                          required
-                          style={input}
-                        >
-                          {unidades.map((u) => (
-                            <option key={u.id} value={u.id}>
-                              {u.sigla}
-                            </option>
-                          ))}
-                        </select>
-
-                        <input
-                          name="quantidade"
-                          defaultValue={String(i.quantidade)}
-                          inputMode="decimal"
-                          style={input}
-                        />
-
-                        <select name="fontePrecoMat" defaultValue={i.fontePrecoMat ?? ''} style={input}>
-                          <option value="">Mat: —</option>
-                          <option value="P1">P1</option>
-                          <option value="P2">P2</option>
-                          <option value="P3">P3</option>
-                        </select>
-
-                        <select name="fontePrecoMo" defaultValue={i.fontePrecoMo ?? ''} style={input}>
-                          <option value="">MO: —</option>
-                          <option value="M1">M1</option>
-                          <option value="M2">M2</option>
-                          <option value="M3">M3</option>
-                        </select>
-
-                        <div
-                          style={{
-                            gridColumn: '1 / span 6',
-                            display: 'flex',
-                            justifyContent: 'flex-end',
-                          }}
-                        >
-                          <button style={primaryBtn}>Salvar alterações</button>
-                        </div>
                       </AutoCloseForm>
-                    </div>
-                  </details>
-                </td>
 
-                {/* EXCLUIR */}
-                <td style={{ ...td, textAlign: 'right' }}>
-                  <form action={excluirItem} style={{ display: 'inline' }}>
-                    <input type="hidden" name="id" value={i.id} />
-                    <input type="hidden" name="estimativaId" value={estimativaId} />
-                    <button style={dangerBtn}>Excluir</button>
-                  </form>
-                </td>
+                      <ToggleRowEditing detailsId={detailsId} rowId={rowId} />
+                    </td>
+
+                    {/* Excluir */}
+                    <td className="text-right whitespace-nowrap">
+                      <form action={excluirItem} className="inline">
+                        <input type="hidden" name="id" value={i.id} />
+                        <input type="hidden" name="estimativaId" value={estimativaId} />
+                        <button className="btn btn-danger btn-sm">Excluir</button>
+                      </form>
+                    </td>
+                  </tr>
+                );
+              })}
+
+              {itens.length === 0 && (
+                <tr>
+                  <td colSpan={9} className="text-center text-zinc-500 py-8">
+                    Nenhum item adicionado ainda.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+
+            <tfoot>
+              <tr style={{ borderTop: '2px solid #ccc' }}>
+                <td colSpan={7} className="text-right font-semibold py-3 pr-3">Total</td>
+                <td colSpan={2} className="text-right font-semibold py-3 pr-3">{money(total)}</td>
               </tr>
-            ))}
-            {itens.length === 0 && (
-              <tr>
-                <td style={td} colSpan={9}>
-                  Nenhum item adicionado ainda.
-                </td>
-              </tr>
-            )}
-          </tbody>
-          <tfoot>
-            <tr style={{ borderTop: '2px solid #ccc' }}>
-              <td colSpan={7} style={{ ...td, textAlign: 'right', fontWeight: 700 }}>
-                Total
-              </td>
-              <td colSpan={2} style={{ ...td, textAlign: 'right', fontWeight: 700 }}>
-                {money(total)}
-              </td>
-            </tr>
-          </tfoot>
-        </table>
+            </tfoot>
+          </table>
+        </div>
+
+        {/* estilos locais para a tabela/edição inline */}
+        <style>{`
+          :root{
+            --bg:#fff; --border:#e6e7eb; --muted:#f7f7fb;
+            --text:#0a0a0a; --subtext:#6b7280;
+            --primary:#0f172a; --primary-hover:#0b1222;
+            --danger-bg:#fff1f2; --danger-text:#be123c;
+          }
+          .card{ background:var(--bg); border:1px solid var(--border); border-radius:12px; padding:12px; }
+          .btn{ display:inline-flex; align-items:center; justify-content:center; border:1px solid var(--border); border-radius:9999px; padding:0 12px; height:36px; background:#f9fafb; color:var(--text); cursor:pointer; }
+          .btn-sm{ height:30px; padding:0 10px; font-size:.85rem; }
+          .btn-primary{ background:var(--primary); border-color:var(--primary); color:#fff; }
+          .btn-primary:hover{ background:var(--primary-hover); }
+          .btn-danger{ background:var(--danger-bg); color:var(--danger-text); border-color:#fecdd3; }
+          .pill{ display:inline-block; padding:5px 10px; border-radius:9999px; border:1px solid var(--border); background:var(--muted); cursor:pointer; font-size:.85rem; }
+          details>summary::-webkit-details-marker{ display:none; }
+
+          .input{ height:36px; padding:0 10px; border:1px solid var(--border); border-radius:10px; outline:none; background:#fff; }
+          .input-sm{ height:30px; padding:0 8px; }
+
+          .table-wrap{ overflow-x:auto; }
+          .table{ border-collapse:collapse; table-layout:fixed; width:100%; font-size:.95rem; }
+          .table thead th{
+            background:#f8fafc; color:var(--subtext); text-align:left; font-weight:600; font-size:.85rem;
+            padding:10px 12px; border-bottom:1px solid var(--border); white-space:nowrap;
+          }
+          .table tbody td{
+            padding:10px 12px; border-bottom:1px solid var(--border); vertical-align:middle; color:var(--text);
+            overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+          }
+          .table tbody tr:hover td{ background:#fafafa; }
+
+          /* inline edit pattern */
+          .cell-edit{ display:none; }
+          tr.editing .cell-view{ display:none; }
+          tr.editing .cell-edit{ display:block; }
+          td .save-btn{ display:none; }
+          tr.editing td .save-btn{ display:inline-flex; }
+        `}</style>
       </section>
     </main>
   );
 }
-
-/* ===== estilos ===== */
-const card: React.CSSProperties = {
-  padding: 12,
-  border: '1px solid #eee',
-  borderRadius: 8,
-  background: '#fff',
-};
-const th: React.CSSProperties = {
-  textAlign: 'left',
-  padding: 10,
-  borderBottom: '1px solid #eee',
-  fontWeight: 600,
-};
-const td: React.CSSProperties = {
-  padding: 10,
-  borderBottom: '1px solid #f2f2f2',
-  verticalAlign: 'top',
-};
-const input: React.CSSProperties = {
-  height: 36,
-  padding: '0 10px',
-  border: '1px solid #ddd',
-  borderRadius: 8,
-  outline: 'none',
-  width: '100%',
-  boxSizing: 'border-box',
-};
-const btn: React.CSSProperties = {
-  height: 30,
-  padding: '0 12px',
-  borderRadius: 8,
-  border: '1px solid #ddd',
-  background: '#f8f8f8',
-  color: '#111',
-  cursor: 'pointer',
-};
-const primaryBtn: React.CSSProperties = {
-  height: 36,
-  padding: '0 14px',
-  borderRadius: 8,
-  border: '1px solid #111',
-  background: '#111',
-  color: '#fff',
-  cursor: 'pointer',
-};
-const dangerBtn: React.CSSProperties = {
-  height: 30,
-  padding: '0 10px',
-  borderRadius: 8,
-  border: '1px solid #f1d0d0',
-  background: '#ffeaea',
-  color: '#b40000',
-  cursor: 'pointer',
-};
-const linkBtn: React.CSSProperties = {
-  display: 'inline-block',
-  padding: '8px 12px',
-  border: '1px solid #ddd',
-  borderRadius: 8,
-  background: '#f8f8f8',
-  textDecoration: 'none',
-  color: '#111',
-};
