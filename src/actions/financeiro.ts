@@ -1,159 +1,89 @@
-// src/actions/financeiro.ts
 'use server';
 
 import { prisma } from '@/lib/prisma';
+import { getSupabaseServer } from '@/lib/supabaseServer';
+import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 
-/* =========================================================
- * RESUMO (LEGADO)
- * =======================================================*/
-export async function salvarResumoFinanceiro(formData: FormData) {
-  const projetoId = Number(formData.get('projetoId'));
-  const recebemos = Number(String(formData.get('recebemos') || '0').replace(',', '.'));
-  const observacoes = String(formData.get('observacoes') || '');
-
-  await prisma.resumoProjeto.upsert({
-    where: { projetoId },
-    create: { projetoId, recebemos, observacoes },
-    update: { recebemos, observacoes },
+/** Descobre o usuarioId (interno) a partir do Supabase */
+async function meId() {
+  const supabase = await getSupabaseServer();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Não autenticado.');
+  const me = await prisma.usuario.findUnique({
+    where: { supabaseUserId: user.id },
+    select: { id: true },
   });
-
-  revalidatePath(`/projetos/${projetoId}/financeiro`);
+  if (!me) throw new Error('Usuário da aplicação não encontrado.');
+  return me.id;
 }
 
-/* =========================================================
- * AJUSTES POR ITEM + HONORÁRIOS (tudo num submit)
- * =======================================================*/
+/**
+ * Salva (upsert) AJUSTE FINANCEIRO para UM ITEM da estimativa.
+ * Chave lógica: (usuarioId, projetoId, estimativaItemId)
+ * - Se já existir, atualiza.
+ * - Se não, cria.
+ *
+ * Espera no form:
+ *   projetoId, estimativaItemId, percentual, valorFixo, observacao
+ */
+export async function salvarAjusteDoItem(formData: FormData) {
+  const usuarioId = await meId();
 
-type AjusteItemPayload = {
-  estimativaItemId: number;
-  percentual: number | null;
-  observacao: string | null;
-  aplicarEmSimilares: boolean;
-  grupoSimilar: string | null;
-};
+  const projetoId        = Number(formData.get('projetoId'));
+  const estimativaItemId = Number(formData.get('estimativaItemId'));
+  const percentualRaw    = String(formData.get('percentual') ?? '').trim();
+  const valorFixoRaw     = String(formData.get('valorFixo') ?? '').trim();
+  const observacao       = (String(formData.get('observacao') ?? '').trim() || null) as string | null;
 
-export async function upsertAjustesFinanceiros(input: {
-  projetoId: number;
-  usuarioId: number; // se vier 0/NaN, usamos o dono do projeto
-  itens: AjusteItemPayload[];
-  honorariosPercentual?: number | null; // <- novo: vem da prévia da toolbar
-}) {
-  const { projetoId, usuarioId, itens, honorariosPercentual } = input;
-
-  // fallback: dono do projeto (defensivo)
-  const projeto = await prisma.projeto.findUnique({
-    where: { id: projetoId },
-    select: { usuarioId: true },
-  });
-  const usuarioIdEfetivo =
-    Number.isFinite(usuarioId) && usuarioId > 0 ? usuarioId : projeto?.usuarioId ?? 1;
-
-  // usa aprovada primeiro; se não existir, pega a mais recente
-  const estimativa = await prisma.estimativa.findFirst({
-    where: { projetoId },
-    orderBy: [{ aprovada: 'desc' }, { criadaEm: 'desc' }],
-    include: {
-      itens: {
-        include: { produto: { select: { nome: true } } },
-      },
-    },
-  });
-
-  if (!estimativa) {
-    return { ok: false, message: 'Nenhuma estimativa encontrada para este projeto.' };
+  if (!Number.isFinite(projetoId) || !Number.isFinite(estimativaItemId)) {
+    throw new Error('Projeto/Item inválido.');
   }
 
-  const creates: Parameters<typeof prisma.financeiroAjuste.create>[] = [];
+  // converte “10,5” → 10.5 etc.
+  const toNum = (s: string) => {
+    if (!s) return null;
+    const n = Number(s.replace(/\./g, '').replace(',', '.'));
+    return Number.isFinite(n) ? n : null;
+  };
+  const percentual = toNum(percentualRaw); // ex.: 10.000 => +10%
+  const valorFixo  = toNum(valorFixoRaw);  // em R$
 
-  // Ajustes por item (respeita "aplicar em similares")
-  for (const it of itens) {
-    let alvoIds: number[] = [it.estimativaItemId];
-
-    if (it.aplicarEmSimilares && it.grupoSimilar) {
-      const similares = estimativa.itens.filter(
-        (row) => (row.produto?.nome || (row as any).nome || null) === it.grupoSimilar
-      );
-      const similaresIds = similares.map((s) => s.id);
-      alvoIds = Array.from(new Set([...alvoIds, ...similaresIds]));
-    }
-
-    for (const alvoId of alvoIds) {
-      creates.push({
-        data: {
-          usuarioId: usuarioIdEfetivo,
-          projetoId,
-          estimativaItemId: alvoId,
-          percentual: it.percentual != null ? it.percentual : null,
-          valorFixo: null, // coluna descontinuada na UI
-          observacao: it.observacao,
-        },
-      });
-    }
+  // segurança: item precisa pertencer ao mesmo projeto
+  const item = await prisma.estimativaItem.findUnique({
+    where: { id: estimativaItemId },
+    select: { estimativa: { select: { projetoId: true } } },
+  });
+  if (!item || item.estimativa.projetoId !== projetoId) {
+    throw new Error('Item não pertence ao projeto informado.');
   }
 
-  // Honorários no nível do projeto (opcional)
-  if (honorariosPercentual != null && Number.isFinite(honorariosPercentual)) {
-    creates.push({
+  // procura ajuste existente
+  const existing = await prisma.financeiroAjuste.findFirst({
+    where: { usuarioId, projetoId, estimativaItemId },
+    select: { id: true },
+  });
+
+  if (existing) {
+    await prisma.financeiroAjuste.update({
+      where: { id: existing.id },
+      data: { percentual, valorFixo, observacao },
+    });
+  } else {
+    await prisma.financeiroAjuste.create({
       data: {
-        usuarioId: usuarioIdEfetivo,
+        usuarioId,
         projetoId,
-        percentual: honorariosPercentual,
-        valorFixo: null,
-        observacao: 'HONORARIOS',
+        estimativaItemId,
+        percentual,
+        valorFixo,
+        observacao,
       },
     });
   }
 
-  if (creates.length > 0) {
-    await prisma.$transaction(creates.map((c) => prisma.financeiroAjuste.create(c)));
-  }
-
+  // revalida páginas relacionadas ao projeto (itens/financeiro)
+  revalidatePath(`/projetos/${projetoId}/itens`);
   revalidatePath(`/projetos/${projetoId}/financeiro`);
-  return { ok: true };
-}
-
-/* =========================================================
- * HONORÁRIOS (legado) — pode remover quando não for mais usado
- * =======================================================*/
-export async function aplicarHonorarios(formData: FormData) {
-  const projetoId = Number(formData.get('projetoId'));
-  const usuarioId = Number(formData.get('usuarioId') || 0);
-  const percentual = Number(String(formData.get('percentual') || '').replace(',', '.'));
-
-  // fallback: dono do projeto
-  const projeto = await prisma.projeto.findUnique({
-    where: { id: projetoId },
-    select: { usuarioId: true },
-  });
-  const usuarioIdEfetivo =
-    Number.isFinite(usuarioId) && usuarioId > 0 ? usuarioId : projeto?.usuarioId ?? 1;
-
-  if (!Number.isFinite(percentual)) {
-    revalidatePath(`/projetos/${projetoId}/financeiro`);
-    return { ok: false, message: 'Percentual inválido.' };
-  }
-
-  await prisma.financeiroAjuste.create({
-    data: {
-      usuarioId: usuarioIdEfetivo,
-      projetoId,
-      percentual,
-      valorFixo: null,
-      observacao: 'HONORARIOS',
-    },
-  });
-
-  revalidatePath(`/projetos/${projetoId}/financeiro`);
-  return { ok: true };
-}
-
-/* =========================================================
- * PDF (placeholder seguro)
- * =======================================================*/
-export async function gerarPdfApresentacao(formData: FormData) {
-  const projetoId = Number(formData.get('projetoId'));
-  // TODO: montar o PDF com os valores ajustados e armazenar/entregar download
-  revalidatePath(`/projetos/${projetoId}/financeiro`);
-  return { ok: true };
+  redirect(`/projetos/${projetoId}/itens?ok=1`);
 }
