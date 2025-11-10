@@ -133,8 +133,8 @@ export default async function Page({ params, searchParams }: Props) {
         <div className="table-wrap">
           <table className="table w-full">
             <colgroup>
-              <col />                       {/* Produto */}
-              <col style={{ width: '22%' }} />  {/* Fornecedor */}
+              <col style={{ width: '80' }} />  {/* Produto */}
+              <col style={{ width: '80' }} />  {/* Fornecedor */}
               <col style={{ width: 80 }} />     {/* Qtd */}
               <col style={{ width: 90 }} />     {/* UM */}
               <col style={{ width: 130 }} />    {/* Unit Mat */}
