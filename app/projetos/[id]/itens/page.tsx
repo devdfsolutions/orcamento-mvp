@@ -133,21 +133,32 @@ export default async function Page({ params, searchParams }: Props) {
         <div className="table-wrap">
           <table className="table w-full">
             <colgroup>
-              <col style={{ width: '80%' }} />  {/* Produto */}
-              <col style={{ width: '80%' }} />  {/* Fornecedor */}
-              <col style={{ width: 80 }} />     {/* Qtd */}
-              <col style={{ width: 90 }} />     {/* UM */}
-              <col style={{ width: 130 }} />    {/* Unit Mat */}
-              <col style={{ width: 130 }} />    {/* Unit MO */}
-              <col style={{ width: 130 }} />    {/* Total */}
-              <col style={{ width: 160 }} />    {/* Editar */}
-              <col style={{ width: 110 }} />    {/* Excluir */}
+              <col />                         {/* Produto/Serviço (flex) */}
+              <col style={{ width: '18%' }} />/* Fornecedor */
+              <col style={{ width: '9ch' }} />/* Qtd */
+              <col style={{ width: '8ch' }} />/* UM */
+              <col style={{ width: '14ch' }} />/* Unit. Materiais */
+              <col style={{ width: '14ch' }} />/* Unit. Mão de Obra */
+              <col style={{ width: '14ch' }} />/* Total */
+              <col style={{ width: 120 }} />  /* Editar */
+              <col style={{ width: 100 }} />  /* Excluir */
             </colgroup>
 
             <thead>
               <tr>
-                {['Produto/Serviço','Fornecedor','Qtd','UM','Unit. Materiais','Unit. Mão de Obra','Total do item','Editar','']
-                  .map((h)=> <th key={h}>{h}</th>)}
+                {[
+                  'Produto/Serviço',
+                  'Fornecedor',
+                  'Qtd',
+                  'UM',
+                  'Unit. Materiais',
+                  'Unit. Mão de Obra',
+                  'Total do item',
+                  'Editar',
+                  '',
+                ].map((h) => (
+                  <th key={h}>{h}</th>
+                ))}
               </tr>
             </thead>
 
@@ -182,7 +193,9 @@ export default async function Page({ params, searchParams }: Props) {
 
                     {/* Quantidade */}
                     <td>
-                      <span className="cell-view">{Number(i.quantidade).toLocaleString('pt-BR')}</span>
+                      <span className="cell-view">
+                        {Number(i.quantidade).toLocaleString('pt-BR')}
+                      </span>
                       <input
                         form={formId}
                         name="quantidade"
@@ -202,7 +215,7 @@ export default async function Page({ params, searchParams }: Props) {
                         className="cell-edit input input-sm w-full"
                         required
                       >
-                        {unidades.map((u)=>(
+                        {unidades.map((u) => (
                           <option key={u.id} value={u.id}>{u.sigla}</option>
                         ))}
                       </select>
@@ -246,7 +259,9 @@ export default async function Page({ params, searchParams }: Props) {
 
                     {/* Total */}
                     <td className="text-right">
-                      <span className="cell-view" style={{ fontWeight: 600 }}>{money(i.totalItem)}</span>
+                      <span className="cell-view" style={{ fontWeight: 600 }}>
+                        {money(i.totalItem)}
+                      </span>
                     </td>
 
                     {/* Ações – Editar/Salvar */}
@@ -312,7 +327,7 @@ export default async function Page({ params, searchParams }: Props) {
             --danger-bg:#fff1f2; --danger-text:#be123c;
           }
           .card{ background:var(--bg); border:1px solid var(--border); border-radius:12px; padding:12px; }
-          .btn{ display:inline-flex; align-items:center; justify-content:center; border:1px solid var(--border); border-radius:9999px; padding:0 12px; height:36px; background:#f9fafb; color:var(--text); cursor:pointer; }
+          .btn{ display:inline-flex; align-items:center; justify-content:center; border:1px solid var(--border); border-radius:9999px; padding:0 12px; height:36px; background:#f9fafb; color:#0a0a0a; cursor:pointer; }
           .btn-sm{ height:30px; padding:0 10px; font-size:.85rem; }
           .btn-primary{ background:var(--primary); border-color:var(--primary); color:#fff; }
           .btn-primary:hover{ background:var(--primary-hover); }
