@@ -14,6 +14,7 @@ import {
 } from '@/actions/estimativas';
 import AutoCloseForm from '@/components/AutoCloseForm';
 import ToggleRowEditing from '@/components/ToggleRowEditing';
+import ItemSmartAdd from '@/components/ItemSmartAdd'; // <- voltou
 
 /* ===== helpers ===== */
 const money = (v: any) =>
@@ -36,7 +37,8 @@ export default async function Page({ params, searchParams }: Props) {
 
   const estimativaId = await ensureEstimativa(projetoId);
 
-  const [unidades, fornecedores, est] = await Promise.all([
+  // agora buscamos produtos tbm (com unidade)
+  const [unidades, fornecedores, produtos, est] = await Promise.all([
     prisma.unidadeMedida.findMany({
       where: { usuarioId: projeto.usuarioId },
       orderBy: { sigla: 'asc' },
@@ -44,6 +46,11 @@ export default async function Page({ params, searchParams }: Props) {
     prisma.fornecedor.findMany({
       where: { usuarioId: projeto.usuarioId },
       orderBy: { nome: 'asc' },
+    }),
+    prisma.produtoServico.findMany({
+      where: { usuarioId: projeto.usuarioId },
+      orderBy: { nome: 'asc' },
+      include: { unidade: true },
     }),
     prisma.estimativa.findUnique({
       where: { id: estimativaId },
@@ -67,15 +74,7 @@ export default async function Page({ params, searchParams }: Props) {
   return (
     <main className="mx-auto grid gap-4" style={{ padding: 24, maxWidth: 1200 }}>
       {errorMsg && (
-        <div
-          style={{
-            padding: '10px 12px',
-            border: '1px solid #f1d0d0',
-            background: '#ffeaea',
-            color: '#7a0000',
-            borderRadius: 8,
-          }}
-        >
+        <div style={{padding:'10px 12px',border:'1px solid #f1d0d0',background:'#ffeaea',color:'#7a0000',borderRadius:8}}>
           {errorMsg}
         </div>
       )}
@@ -131,6 +130,19 @@ export default async function Page({ params, searchParams }: Props) {
         </div>
       </section>
 
+      {/* 🔽 ADICIONAR ITEM (Smart) */}
+      <section className="card">
+        <ItemSmartAdd
+          estimativaId={estimativaId}
+          produtos={produtos.map((p) => ({
+            id: p.id,
+            nome: p.nome,
+            unidade: p.unidade ? { id: p.unidade.id, sigla: p.unidade.sigla } : undefined,
+          }))}
+          unidades={unidades.map((u) => ({ id: u.id, sigla: u.sigla }))}
+        />
+      </section>
+
       {/* LISTA (edição inline por linha) */}
       <section className="card p-0 overflow-hidden">
         <div className="table-wrap">
@@ -149,19 +161,8 @@ export default async function Page({ params, searchParams }: Props) {
 
             <thead>
               <tr>
-                {[
-                  'Produto/Serviço',
-                  'Fornecedor',
-                  'Qtd',
-                  'UM',
-                  'Unit. Materiais',
-                  'Unit. Mão de Obra',
-                  'Total do item',
-                  'Editar',
-                  '',
-                ].map((h) => (
-                  <th key={h}>{h}</th>
-                ))}
+                {['Produto/Serviço','Fornecedor','Qtd','UM','Unit. Materiais','Unit. Mão de Obra','Total do item','Editar','']
+                  .map((h)=> <th key={h}>{h}</th>)}
               </tr>
             </thead>
 
@@ -177,79 +178,39 @@ export default async function Page({ params, searchParams }: Props) {
 
                     <td>
                       <span className="cell-view">{i.fornecedor.nome}</span>
-                      <select
-                        form={formId}
-                        name="fornecedorId"
-                        defaultValue={String(i.fornecedorId)}
-                        className="cell-edit input input-sm w-full"
-                        required
-                      >
-                        {fornecedores.map((f) => (
-                          <option key={f.id} value={f.id}>{f.nome}</option>
-                        ))}
+                      <select form={formId} name="fornecedorId" defaultValue={String(i.fornecedorId)} className="cell-edit input input-sm w-full" required>
+                        {fornecedores.map((f) => <option key={f.id} value={f.id}>{f.nome}</option>)}
                       </select>
                     </td>
 
                     <td>
                       <span className="cell-view">{Number(i.quantidade).toLocaleString('pt-BR')}</span>
-                      <input
-                        form={formId}
-                        name="quantidade"
-                        defaultValue={String(i.quantidade)}
-                        inputMode="decimal"
-                        className="cell-edit input input-sm w-full"
-                      />
+                      <input form={formId} name="quantidade" defaultValue={String(i.quantidade)} inputMode="decimal" className="cell-edit input input-sm w-full" />
                     </td>
 
                     <td>
                       <span className="cell-view">{i.unidade.sigla}</span>
-                      <select
-                        form={formId}
-                        name="unidadeId"
-                        defaultValue={String(i.unidadeId)}
-                        className="cell-edit input input-sm w-full"
-                        required
-                      >
-                        {unidades.map((u) => (
-                          <option key={u.id} value={u.id}>{u.sigla}</option>
-                        ))}
+                      <select form={formId} name="unidadeId" defaultValue={String(i.unidadeId)} className="cell-edit input input-sm w-full" required>
+                        {unidades.map((u)=> <option key={u.id} value={u.id}>{u.sigla}</option>)}
                       </select>
                     </td>
 
                     <td className="text-right">
                       <span className="cell-view">{i.valorUnitMat == null ? '—' : money(i.valorUnitMat)}</span>
-                      <select
-                        form={formId}
-                        name="fontePrecoMat"
-                        defaultValue={i.fontePrecoMat ?? ''}
-                        className="cell-edit input input-sm w-full"
-                      >
-                        <option value="">Mat: —</option>
-                        <option value="P1">P1</option>
-                        <option value="P2">P2</option>
-                        <option value="P3">P3</option>
+                      <select form={formId} name="fontePrecoMat" defaultValue={i.fontePrecoMat ?? ''} className="cell-edit input input-sm w-full">
+                        <option value="">Mat: —</option><option value="P1">P1</option><option value="P2">P2</option><option value="P3">P3</option>
                       </select>
                     </td>
 
                     <td className="text-right">
                       <span className="cell-view">{i.valorUnitMo == null ? '—' : money(i.valorUnitMo)}</span>
-                      <select
-                        form={formId}
-                        name="fontePrecoMo"
-                        defaultValue={i.fontePrecoMo ?? ''}
-                        className="cell-edit input input-sm w-full"
-                      >
-                        <option value="">MO: —</option>
-                        <option value="M1">M1</option>
-                        <option value="M2">M2</option>
-                        <option value="M3">M3</option>
+                      <select form={formId} name="fontePrecoMo" defaultValue={i.fontePrecoMo ?? ''} className="cell-edit input input-sm w-full">
+                        <option value="">MO: —</option><option value="M1">M1</option><option value="M2">M2</option><option value="M3">M3</option>
                       </select>
                     </td>
 
                     <td className="text-right">
-                      <span className="cell-view" style={{ fontWeight: 600 }}>
-                        {money(i.totalItem)}
-                      </span>
+                      <span className="cell-view" style={{ fontWeight: 600 }}>{money(i.totalItem)}</span>
                     </td>
 
                     <td className="text-right whitespace-nowrap">
@@ -257,11 +218,7 @@ export default async function Page({ params, searchParams }: Props) {
                         <summary className="pill">Editar</summary>
                       </details>
 
-                      <button
-                        type="submit"
-                        form={formId}
-                        className="btn btn-primary btn-sm save-btn align-middle"
-                      >
+                      <button type="submit" form={formId} className="btn btn-primary btn-sm save-btn align-middle">
                         Salvar
                       </button>
 
@@ -303,14 +260,8 @@ export default async function Page({ params, searchParams }: Props) {
           </table>
         </div>
 
-        {/* estilos locais */}
         <style>{`
-          :root{
-            --bg:#fff; --border:#e6e7eb; --muted:#f7f7fb;
-            --text:#0a0a0a; --subtext:#6b7280;
-            --primary:#0f172a; --primary-hover:#0b1222;
-            --danger-bg:#fff1f2; --danger-text:#be123c;
-          }
+          :root{ --bg:#fff; --border:#e6e7eb; --muted:#f7f7fb; --text:#0a0a0a; --subtext:#6b7280; --primary:#0f172a; --primary-hover:#0b1222; --danger-bg:#fff1f2; --danger-text:#be123c; }
           .card{ background:var(--bg); border:1px solid var(--border); border-radius:12px; padding:12px; }
           .btn{ display:inline-flex; align-items:center; justify-content:center; border:1px solid var(--border); border-radius:9999px; padding:0 12px; height:36px; background:#f9fafb; color:#0a0a0a; cursor:pointer; }
           .btn-sm{ height:30px; padding:0 10px; font-size:.85rem; }
@@ -324,29 +275,12 @@ export default async function Page({ params, searchParams }: Props) {
           .input-sm{ height:30px; padding:0 8px; }
 
           .table-wrap{ overflow-x:auto; }
-          .table{
-            border-collapse:collapse;
-            table-layout:auto;
-            width:100%;
-            font-size:.95rem;
-          }
-          .table thead th{
-            background:#f8fafc; color:var(--subtext); text-align:left; font-weight:600; font-size:.85rem;
-            padding:10px 12px; border-bottom:1px solid var(--border); white-space:nowrap;
-          }
-          .table tbody td{
-            padding:10px 12px; border-bottom:1px solid var(--border); vertical-align:middle; color:var(--text);
-            white-space:nowrap;
-          }
-
-          /* permite expansão natural das 2 primeiras colunas */
-          col.col-prod, col.col-forn {
-            min-width: 200px;
-          }
-
+          .table{ border-collapse:collapse; table-layout:auto; width:100%; font-size:.95rem; }
+          .table thead th{ background:#f8fafc; color:var(--subtext); text-align:left; font-weight:600; font-size:.85rem; padding:10px 12px; border-bottom:1px solid var(--border); white-space:nowrap; }
+          .table tbody td{ padding:10px 12px; border-bottom:1px solid var(--border); vertical-align:middle; color:var(--text); white-space:nowrap; }
+          col.col-prod, col.col-forn { min-width: 200px; }
           .table tbody tr:hover td{ background:#fafafa; }
 
-          /* inline edit */
           .cell-edit{ display:none; }
           tr.editing .cell-view{ display:none; }
           tr.editing .cell-edit{ display:block; }
