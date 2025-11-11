@@ -28,20 +28,23 @@ export default async function Page({ params, searchParams }: Props) {
 
   const projetoId = Number(params.id);
 
-  // resolve projeto (exibe cliente/nome)
   const projeto = await prisma.projeto.findUnique({
     where: { id: projetoId },
     include: { cliente: true },
   });
   if (!projeto) redirect('/projetos');
 
-  // garante 1 estimativa do projeto
   const estimativaId = await ensureEstimativa(projetoId);
 
-  // dados para selects e lista de itens
   const [unidades, fornecedores, est] = await Promise.all([
-    prisma.unidadeMedida.findMany({ where: { usuarioId: projeto.usuarioId }, orderBy: { sigla: 'asc' } }),
-    prisma.fornecedor.findMany({ where: { usuarioId: projeto.usuarioId }, orderBy: { nome: 'asc' } }),
+    prisma.unidadeMedida.findMany({
+      where: { usuarioId: projeto.usuarioId },
+      orderBy: { sigla: 'asc' },
+    }),
+    prisma.fornecedor.findMany({
+      where: { usuarioId: projeto.usuarioId },
+      orderBy: { nome: 'asc' },
+    }),
     prisma.estimativa.findUnique({
       where: { id: estimativaId },
       include: {
@@ -62,7 +65,7 @@ export default async function Page({ params, searchParams }: Props) {
       : null;
 
   return (
-    <main className="mx-auto grid gap-4" style={{ padding: 24, maxWidth: 1100 }}>
+    <main className="mx-auto grid gap-4" style={{ padding: 24, maxWidth: 1200 }}>
       {errorMsg && (
         <div
           style={{
@@ -133,15 +136,15 @@ export default async function Page({ params, searchParams }: Props) {
         <div className="table-wrap">
           <table className="table w-full">
             <colgroup>
-              <col />                         {/* Produto/Serviço (flex) */}
-              <col style={{ width: '18%' }} />/* Fornecedor */
-              <col style={{ width: '9ch' }} />/* Qtd */
-              <col style={{ width: '8ch' }} />/* UM */
-              <col style={{ width: '14ch' }} />/* Unit. Materiais */
-              <col style={{ width: '14ch' }} />/* Unit. Mão de Obra */
-              <col style={{ width: '14ch' }} />/* Total */
-              <col style={{ width: 120 }} />  /* Editar */
-              <col style={{ width: 100 }} />  /* Excluir */
+              <col className="col-prod" />
+              <col className="col-forn" />
+              <col style={{ width: '9ch' }} />
+              <col style={{ width: '8ch' }} />
+              <col style={{ width: '16ch' }} />
+              <col style={{ width: '16ch' }} />
+              <col style={{ width: '16ch' }} />
+              <col style={{ width: 120 }} />
+              <col style={{ width: 100 }} />
             </colgroup>
 
             <thead>
@@ -170,12 +173,8 @@ export default async function Page({ params, searchParams }: Props) {
 
                 return (
                   <tr key={i.id} id={rowId}>
-                    {/* Produto (não editamos aqui) */}
-                    <td>
-                      <span className="cell-view font-medium text-zinc-900">{i.produto.nome}</span>
-                    </td>
+                    <td><span className="cell-view font-medium text-zinc-900">{i.produto.nome}</span></td>
 
-                    {/* Fornecedor */}
                     <td>
                       <span className="cell-view">{i.fornecedor.nome}</span>
                       <select
@@ -191,11 +190,8 @@ export default async function Page({ params, searchParams }: Props) {
                       </select>
                     </td>
 
-                    {/* Quantidade */}
                     <td>
-                      <span className="cell-view">
-                        {Number(i.quantidade).toLocaleString('pt-BR')}
-                      </span>
+                      <span className="cell-view">{Number(i.quantidade).toLocaleString('pt-BR')}</span>
                       <input
                         form={formId}
                         name="quantidade"
@@ -205,7 +201,6 @@ export default async function Page({ params, searchParams }: Props) {
                       />
                     </td>
 
-                    {/* UM */}
                     <td>
                       <span className="cell-view">{i.unidade.sigla}</span>
                       <select
@@ -221,11 +216,8 @@ export default async function Page({ params, searchParams }: Props) {
                       </select>
                     </td>
 
-                    {/* Unit Mat */}
                     <td className="text-right">
-                      <span className="cell-view">
-                        {i.valorUnitMat == null ? '—' : money(i.valorUnitMat)}
-                      </span>
+                      <span className="cell-view">{i.valorUnitMat == null ? '—' : money(i.valorUnitMat)}</span>
                       <select
                         form={formId}
                         name="fontePrecoMat"
@@ -239,11 +231,8 @@ export default async function Page({ params, searchParams }: Props) {
                       </select>
                     </td>
 
-                    {/* Unit MO */}
                     <td className="text-right">
-                      <span className="cell-view">
-                        {i.valorUnitMo == null ? '—' : money(i.valorUnitMo)}
-                      </span>
+                      <span className="cell-view">{i.valorUnitMo == null ? '—' : money(i.valorUnitMo)}</span>
                       <select
                         form={formId}
                         name="fontePrecoMo"
@@ -257,14 +246,12 @@ export default async function Page({ params, searchParams }: Props) {
                       </select>
                     </td>
 
-                    {/* Total */}
                     <td className="text-right">
                       <span className="cell-view" style={{ fontWeight: 600 }}>
                         {money(i.totalItem)}
                       </span>
                     </td>
 
-                    {/* Ações – Editar/Salvar */}
                     <td className="text-right whitespace-nowrap">
                       <details id={detailsId} className="inline-block mr-2 align-middle">
                         <summary className="pill">Editar</summary>
@@ -278,7 +265,6 @@ export default async function Page({ params, searchParams }: Props) {
                         Salvar
                       </button>
 
-                      {/* form oculto que recebe inputs via atributo `form` */}
                       <AutoCloseForm id={formId} action={atualizarItem} className="hidden">
                         <input type="hidden" name="id" value={i.id} />
                         <input type="hidden" name="estimativaId" value={estimativaId} />
@@ -288,7 +274,6 @@ export default async function Page({ params, searchParams }: Props) {
                       <ToggleRowEditing detailsId={detailsId} rowId={rowId} />
                     </td>
 
-                    {/* Excluir */}
                     <td className="text-right whitespace-nowrap">
                       <form action={excluirItem} className="inline">
                         <input type="hidden" name="id" value={i.id} />
@@ -318,7 +303,7 @@ export default async function Page({ params, searchParams }: Props) {
           </table>
         </div>
 
-        {/* estilos locais para a tabela/edição inline */}
+        {/* estilos locais */}
         <style>{`
           :root{
             --bg:#fff; --border:#e6e7eb; --muted:#f7f7fb;
@@ -339,18 +324,29 @@ export default async function Page({ params, searchParams }: Props) {
           .input-sm{ height:30px; padding:0 8px; }
 
           .table-wrap{ overflow-x:auto; }
-          .table{ border-collapse:collapse; table-layout:fixed; width:100%; font-size:.95rem; }
+          .table{
+            border-collapse:collapse;
+            table-layout:auto;
+            width:100%;
+            font-size:.95rem;
+          }
           .table thead th{
             background:#f8fafc; color:var(--subtext); text-align:left; font-weight:600; font-size:.85rem;
             padding:10px 12px; border-bottom:1px solid var(--border); white-space:nowrap;
           }
           .table tbody td{
             padding:10px 12px; border-bottom:1px solid var(--border); vertical-align:middle; color:var(--text);
-            overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+            white-space:nowrap;
           }
+
+          /* permite expansão natural das 2 primeiras colunas */
+          col.col-prod, col.col-forn {
+            min-width: 200px;
+          }
+
           .table tbody tr:hover td{ background:#fafafa; }
 
-          /* inline edit pattern */
+          /* inline edit */
           .cell-edit{ display:none; }
           tr.editing .cell-view{ display:none; }
           tr.editing .cell-edit{ display:block; }
