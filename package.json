@@ -18,15 +18,15 @@
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
-    "@prisma/client": "^6.16.2",
-    "@supabase/ssr": "^0.7.0",
-    "@supabase/supabase-js": "^2.57.4",
-    "docx": "^9.5.1",
-    "next": "^16.0.7",
-    "react": "19.2.1",
-    "react-dom": "19.1.0",
-    "zod": "^4.1.11"
-  },
+  "@prisma/client": "^6.16.2",
+  "@supabase/ssr": "^0.7.0",
+  "@supabase/supabase-js": "^2.57.4",
+  "docx": "^9.5.1",
+  "next": "16.0.8",
+  "react": "19.2.1",
+  "react-dom": "19.2.1",
+  "zod": "^4.1.11"
+},
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
