@@ -4,9 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3000",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "next start -p 3000",
-     "build": "prisma generate && next build",
     "lint": "next lint",
     "prisma:generate": "prisma generate",
     "prisma:studio": "prisma studio",
@@ -22,7 +21,7 @@
     "@supabase/ssr": "^0.7.0",
     "@supabase/supabase-js": "^2.57.4",
     "docx": "^9.5.1",
-    "next": "15.5.3",
+    "next": "15.5.7",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "zod": "^4.1.11"
