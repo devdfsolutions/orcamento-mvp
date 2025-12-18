@@ -8,20 +8,36 @@ import { Prisma } from "@prisma/client";
 
 const PAGE = "/cadastros/fornecedores";
 
-const digits = (s?: FormDataEntryValue | null) =>
-  String(s ?? "").replace(/\D+/g, "");
+const digits = (v?: FormDataEntryValue | null) =>
+  String(v ?? "").replace(/\D+/g, "");
 
-function backWithError(err: unknown) {
+function uniqueDocMessage() {
+  return "Já existe fornecedor com este CNPJ/CPF.";
+}
+
+/** ✅ Detecta o redirect interno do Next (evita logar como erro) */
+function isNextRedirect(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const digest = (err as { digest?: unknown }).digest;
+  return typeof digest === "string" && digest.startsWith("NEXT_REDIRECT");
+}
+
+function backWithError(err: unknown): never {
   const msg =
-    (err as any)?.message ??
-    (typeof err === "string" ? err : "Erro inesperado.");
+    err instanceof Error
+      ? err.message
+      : typeof err === "string"
+      ? err
+      : "Erro inesperado.";
+
   console.error("[fornecedores action]", err);
   redirect(`${PAGE}?e=${encodeURIComponent(msg)}`);
 }
 
-function normalizeDoc(raw: FormDataEntryValue | null): string | null {
+function normalizeDocRequired(raw: FormDataEntryValue | null): string {
   const d = digits(raw);
-  return d.length ? d : null; // <<< evita "" (string vazia) e usa null
+  if (!d) throw new Error("Informe o CNPJ/CPF do fornecedor.");
+  return d;
 }
 
 export async function criarFornecedor(formData: FormData) {
@@ -29,22 +45,29 @@ export async function criarFornecedor(formData: FormData) {
     const { id: usuarioId } = await authUser();
 
     const nome = String(formData.get("nome") ?? "").trim();
-    const cnpjCpf = normalizeDoc(formData.get("cnpjCpf"));
-    const contato =
-      (String(formData.get("contato") ?? "").trim() || null) as string | null;
+    const cnpjCpf = normalizeDocRequired(formData.get("cnpjCpf"));
+    const contato = String(formData.get("contato") ?? "").trim() || null;
 
     if (!nome) throw new Error("Informe o nome do fornecedor.");
 
     await prisma.fornecedor.create({
-      data: { usuarioId, nome, cnpjCpf, contato },
+      data: {
+        usuarioId,
+        nome,
+        cnpjCpf,
+        contato,
+        updatedAt: new Date(), // mantém teu workaround
+      },
     });
 
     revalidatePath(PAGE);
     redirect(`${PAGE}?ok=1`);
   } catch (err) {
-    // trata UNIQUE
+    // ✅ se for redirect do Next, deixa passar (não loga como erro)
+    if (isNextRedirect(err)) throw err;
+
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
-      return backWithError("Já existe fornecedor com este CNPJ/CPF.");
+      return backWithError(uniqueDocMessage());
     }
     return backWithError(err);
   }
@@ -56,24 +79,29 @@ export async function atualizarFornecedor(formData: FormData) {
 
     const id = Number(formData.get("id"));
     const nome = String(formData.get("nome") ?? "").trim();
-    const cnpjCpf = normalizeDoc(formData.get("cnpjCpf"));
-    const contato =
-      (String(formData.get("contato") ?? "").trim() || null) as string | null;
+    const cnpjCpf = normalizeDocRequired(formData.get("cnpjCpf"));
+    const contato = String(formData.get("contato") ?? "").trim() || null;
 
     if (!id) throw new Error("ID inválido.");
     if (!nome) throw new Error("Informe o nome do fornecedor.");
 
-    // escopo por usuário + update
     await prisma.fornecedor.updateMany({
       where: { id, usuarioId },
-      data: { nome, cnpjCpf, contato },
+      data: {
+        nome,
+        cnpjCpf,
+        contato,
+        updatedAt: new Date(), // mantém coerência
+      },
     });
 
     revalidatePath(PAGE);
     redirect(`${PAGE}?ok=1`);
   } catch (err) {
+    if (isNextRedirect(err)) throw err;
+
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
-      return backWithError("Já existe fornecedor com este CNPJ/CPF.");
+      return backWithError(uniqueDocMessage());
     }
     return backWithError(err);
   }
@@ -93,6 +121,7 @@ export async function excluirFornecedor(formData: FormData) {
     revalidatePath(PAGE);
     redirect(`${PAGE}?ok=1`);
   } catch (err) {
+    if (isNextRedirect(err)) throw err;
     return backWithError(err);
   }
 }

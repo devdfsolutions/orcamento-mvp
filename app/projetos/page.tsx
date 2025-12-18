@@ -1,226 +1,242 @@
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
-export const runtime = 'nodejs';
+import Link from "next/link";
+import { redirect } from "next/navigation";
+import { prisma } from "@/lib/prisma";
+import { getSupabaseServer } from "@/lib/supabaseServer";
 
-import ConfirmSubmit from '@/components/ConfirmSubmit';
-import { prisma } from '@/lib/prisma';
-import { getSupabaseServer } from '@/lib/supabaseServer';
-import { redirect } from 'next/navigation';
-import { criarProjetoAndGo, excluirProjeto, excluirProjetosEmLote } from '@/actions/projetos';
+import { criarProjetoAndGo, excluirProjeto } from "@/actions/projetos";
+import ConfirmSubmit from "@/components/ConfirmSubmit";
 
-export default async function Page() {
-  // Auth
+export const dynamic = "force-dynamic";
+
+type PageProps = {
+  searchParams?: Promise<{ ok?: string; e?: string; q?: string }>;
+};
+
+const money = (v: number) =>
+  v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+export default async function Page({ searchParams }: PageProps) {
+  const sp = await searchParams;
+  const q = (sp?.q ?? "").trim();
+
+  // auth
   const supabase = await getSupabaseServer();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
 
-  // Quem sou eu (e qual role)
   const me = await prisma.usuario.findUnique({
     where: { supabaseUserId: user.id },
     select: { id: true, role: true },
   });
-  if (!me) redirect('/login');
+  if (!me) redirect("/login");
+  if (me.role === "ADM") redirect("/admin");
 
-  // 👉 ADM não usa esta tela — manda para /admin
-  if (me.role === 'ADM') redirect('/admin');
+  const whereProjetos = q
+    ? {
+        usuarioId: me.id,
+        OR: [
+          { nome: { contains: q, mode: "insensitive" as const } },
+          { cliente: { nome: { contains: q, mode: "insensitive" as const } } },
+        ],
+      }
+    : { usuarioId: me.id };
 
-  // Clientes do meu usuário (para o combo de novo projeto)
-  const clientes = await prisma.clienteUsuario.findMany({
-    where: { usuarioId: me.id },
-    orderBy: { nome: 'asc' },
-    select: { id: true, nome: true },
-  });
-
-  // Projetos do meu usuário
-  const projetos = await prisma.projeto.findMany({
-    where: { usuarioId: me.id },
-    orderBy: { id: 'desc' },
-    include: {
-      cliente: { select: { id: true, nome: true } },
-      estimativas: {
-        select: { id: true, aprovada: true },
-        take: 1,
-        orderBy: { id: 'asc' },
+  const [clientes, projetos] = await Promise.all([
+    prisma.clienteUsuario.findMany({
+      where: { usuarioId: me.id },
+      orderBy: { nome: "asc" },
+      select: { id: true, nome: true },
+    }),
+    prisma.projeto.findMany({
+      where: whereProjetos,
+      orderBy: { id: "desc" },
+      include: {
+        cliente: { select: { id: true, nome: true } },
+        estimativas: {
+          where: { usuarioId: me.id, aprovada: true },
+          orderBy: { id: "desc" },
+          take: 1,
+          include: {
+            itens: { select: { totalItem: true } },
+          },
+        },
       },
-    },
+    }),
+  ]);
+
+  const projetosComValor = projetos.map((p) => {
+    const est = p.estimativas?.[0];
+    const totalAprovado =
+      est?.itens?.reduce((acc, it) => acc + Number(it.totalItem ?? 0), 0) ?? null;
+
+    return {
+      id: p.id,
+      nome: p.nome,
+      status: p.status,
+      clienteNome: p.cliente?.nome ?? null,
+      totalAprovado,
+    };
   });
 
   return (
-    <main style={{ padding: 24, display: 'grid', gap: 16, maxWidth: 1000 }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700 }}>Projetos</h1>
+    <main className="max-w-[1080px] mr-auto ml-6 p-6 grid gap-5">
+      <header className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold text-zinc-900">Projetos</h1>
+        <Link href="/" className="btn btn-sm">
+          Dashboard
+        </Link>
+      </header>
 
-      {/* Criar e ir para itens (um único botão) */}
-      <section style={card}>
-        <h2 style={h2}>Novo projeto</h2>
-        <form
-          action={criarProjetoAndGo}
-          style={{
-            display: 'grid',
-            gap: 8,
-            gridTemplateColumns: '2fr 2fr 140px',
-            alignItems: 'center',
-          }}
-        >
-          <input name="nome" placeholder="Nome do projeto" required style={input} />
+      {/* alertas */}
+      {!!sp?.ok && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-800">
+          ✅ Ação realizada com sucesso.
+        </div>
+      )}
+      {!!sp?.e && (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-rose-800">
+          ❌ {sp.e}
+        </div>
+      )}
 
-          <select name="clienteId" defaultValue="" style={{ ...input, height: 36 }}>
+      {/* NOVO PROJETO (1 linha) + PESQUISA */}
+      <section className="card">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="card-head">
+            <h2>Novo projeto</h2>
+          </div>
+
+          <form action="/projetos" method="get" className="flex items-center gap-2">
+            <input
+              name="q"
+              defaultValue={q}
+              placeholder="Pesquisar por projeto ou cliente..."
+              className="input"
+              style={{ width: 320 }}
+            />
+            <button className="btn btn-sm" type="submit">
+              Buscar
+            </button>
+            {!!q && (
+              <Link href="/projetos" className="btn btn-sm">
+                Limpar
+              </Link>
+            )}
+          </form>
+        </div>
+
+        <form action={criarProjetoAndGo} className="mt-3 flex items-center gap-2 flex-wrap">
+          <input
+            name="nome"
+            placeholder="Nome do projeto"
+            required
+            className="input"
+            style={{ width: 260 }}
+          />
+
+          <select name="clienteId" className="input" defaultValue="" style={{ width: 260 }}>
             <option value="">Cliente (opcional)</option>
             {clientes.map((c) => (
-              <option key={c.id} value={c.id}>{c.nome}</option>
+              <option key={c.id} value={c.id}>
+                {c.nome}
+              </option>
             ))}
           </select>
 
-          <button style={btn}>Criar projeto</button>
+          <button className="btn btn-primary" type="submit">
+            Criar e abrir itens
+          </button>
         </form>
       </section>
 
-      {/* Lista + Exclusão em lote */}
-      <section style={card}>
-        <form action={excluirProjetosEmLote}>
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: 8,
-            }}
-          >
-            <div style={{ fontWeight: 600 }}>Projetos</div>
-            <ConfirmSubmit
-              style={dangerBtn}
-              message="Excluir todos os selecionados? Essa ação não pode ser desfeita."
-            >
-              Excluir selecionados
-            </ConfirmSubmit>
-          </div>
+      {/* tabela */}
+      <section className="card p-0 overflow-hidden">
+        <div className="table-wrap">
+          <table className="table w-full">
+            <colgroup>
+              {[
+                { w: "64px" }, // ID
+                { w: "34%" }, // Projeto
+                { w: "24%" }, // Cliente
+                { w: "140px" }, // Valor
+                { w: "140px" }, // Status
+                { w: "180px" }, // Ações
+              ].map((c, i) => (
+                <col key={i} style={c.w ? { width: c.w } : undefined} />
+              ))}
+            </colgroup>
 
-          <table
-            style={{
-              width: '100%',
-              borderCollapse: 'collapse',
-              background: '#fff',
-            }}
-          >
             <thead>
               <tr>
-                <th style={{ ...th, width: 36 }}></th>
-                <th style={th}>ID</th>
-                <th style={th}>Projeto</th>
-                <th style={th}>Cliente</th>
-                <th style={th}>Status</th>
-                <th style={{ ...th, textAlign: 'right' }}></th>
+                {["ID", "Projeto", "Cliente", "Valor", "Status", "Ações"].map((h) => (
+                  <th key={h}>{h}</th>
+                ))}
               </tr>
             </thead>
+
             <tbody>
-              {projetos.map((p) => {
-                const v1 = p.estimativas[0];
-                const hasAprovada = Boolean(v1?.aprovada);
+              {projetosComValor.map((p) => (
+                <tr key={p.id}>
+                  <td>{p.id}</td>
+                  <td className="font-medium text-zinc-900">{p.nome}</td>
+                  <td>{p.clienteNome ?? "—"}</td>
+                  <td className="whitespace-nowrap">
+                    {p.totalAprovado != null && p.totalAprovado > 0
+                      ? money(p.totalAprovado)
+                      : "—"}
+                  </td>
+                  <td>{p.status}</td>
+                  <td className="text-right whitespace-nowrap">
+                    <Link href={`/projetos/${p.id}/itens`} className="btn btn-sm mr-2">
+                      Abrir
+                    </Link>
 
-                return (
-                  <tr key={p.id}>
-                    <td style={td}>
-                      <input type="checkbox" name="ids" value={p.id} />
-                    </td>
+                    <form action={excluirProjeto} className="inline align-middle">
+                      <input type="hidden" name="id" value={p.id} />
+                      <ConfirmSubmit className="btn btn-danger btn-sm" message="Excluir este projeto?">
+                        Excluir
+                      </ConfirmSubmit>
+                    </form>
+                  </td>
+                </tr>
+              ))}
 
-                    <td style={td}>{p.id}</td>
-                    <td style={td}>{p.nome}</td>
-                    <td style={td}>{p.cliente?.nome ?? '—'}</td>
-                    <td style={td}>
-                      {hasAprovada ? 'Estimativa aprovada' : 'Em estimativa'}
-                    </td>
-
-                    <td style={{ ...td, whiteSpace: 'nowrap', textAlign: 'right' }}>
-                      <a href={`/projetos/${p.id}/itens`} style={linkBtn}>Editar</a>
-
-                      {hasAprovada ? (
-                        <a href={`/projetos/${p.id}/estimativas`} style={{ ...linkBtn, marginLeft: 8 }}>
-                          Resumo
-                        </a>
-                      ) : (
-                        <span
-                          title="Aprove o projeto para ver o resumo"
-                          style={{ ...linkBtn, marginLeft: 8, opacity: 0.5, cursor: 'not-allowed' }}
-                        >
-                          Resumo
-                        </span>
-                      )}
-
-                      <form action={excluirProjeto} style={{ display: 'inline', marginLeft: 8 }}>
-                        <input type="hidden" name="id" value={p.id} />
-                        <ConfirmSubmit
-                          style={dangerBtn}
-                          message={`Excluir o projeto #${p.id}? Essa ação não pode ser desfeita.`}
-                        >
-                          Excluir
-                        </ConfirmSubmit>
-                      </form>
-                    </td>
-                  </tr>
-                );
-              })}
-              {projetos.length === 0 && (
+              {projetosComValor.length === 0 && (
                 <tr>
-                  <td style={td} colSpan={6}>
-                    Nenhum projeto.
+                  <td colSpan={6} className="text-center text-zinc-500 py-8">
+                    Nenhum projeto encontrado.
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
-        </form>
+        </div>
+
+        <style>{`
+          :root{ --border:#e6e7eb; --muted:#f7f7fb; --text:#0a0a0a; --subtext:#6b7280;
+            --primary:#0f172a; --primary-hover:#0b1222; --accent:#2563eb; --ring:rgba(37,99,235,.25);
+            --danger-bg:#fff1f2; --danger-text:#be123c;
+          }
+          .card{ background:#fff; border:1px solid var(--border); border-radius:12px; padding:12px; box-shadow:0 1px 2px rgba(16,24,40,.04); }
+          .card-head h2{ margin:0; font-size:.95rem; font-weight:600; color:var(--text); }
+          .input{ height:36px; padding:0 10px; border:1px solid var(--border); border-radius:10px; outline:none; background:#fff; font-size:.95rem; }
+          .input:focus{ border-color:var(--accent); box-shadow:0 0 0 3px var(--ring); }
+          .btn{ display:inline-flex; align-items:center; justify-content:center; border:1px solid var(--border); border-radius:9999px; padding:0 12px; height:36px; font-weight:500; background:#f9fafb; color:var(--text); cursor:pointer; transition:.15s; font-size:.95rem; text-decoration:none; }
+          .btn:hover{ background:#f3f4f6; }
+          .btn-sm{ height:30px; padding:0 10px; font-size:.85rem; }
+          .btn-primary{ background:var(--primary); border-color:var(--primary); color:#fff; }
+          .btn-primary:hover{ background:var(--primary-hover); }
+          .btn-danger{ background:var(--danger-bg); color:var(--danger-text); border-color:#fecdd3; }
+          .btn-danger:hover{ background:#ffe4e6; }
+          .table-wrap{ overflow-x:auto; }
+          .table{ border-collapse:collapse; width:100%; font-size:.95rem; }
+          .table thead th{ background:#f8fafc; color:var(--subtext); text-align:left; font-weight:600; font-size:.85rem; padding:10px 12px; border-bottom:1px solid var(--border); white-space:nowrap; }
+          .table tbody td{ padding:10px 12px; border-bottom:1px solid var(--border); vertical-align:middle; color:var(--text); white-space:nowrap; text-overflow:ellipsis; overflow:hidden; }
+          .table tbody tr:hover td{ background:#fafafa; }
+        `}</style>
       </section>
     </main>
   );
 }
-
-/* estilos */
-const card: React.CSSProperties = {
-  padding: 12,
-  border: '1px solid #eee',
-  borderRadius: 8,
-  background: '#fff',
-};
-const h2: React.CSSProperties = { fontSize: 16, margin: '0 0 10px' };
-const th: React.CSSProperties = {
-  textAlign: 'left',
-  padding: 10,
-  borderBottom: '1px solid #eee',
-  background: '#fafafa',
-  fontWeight: 600,
-};
-const td: React.CSSProperties = { padding: 10, borderBottom: '1px solid #f2f2f2' };
-const input: React.CSSProperties = {
-  height: 36,
-  padding: '0 10px',
-  border: '1px solid #ddd',
-  borderRadius: 8,
-  outline: 'none',
-  minWidth: 220,
-};
-const btn: React.CSSProperties = {
-  height: 36,
-  padding: '0 14px',
-  borderRadius: 8,
-  border: '1px solid #ddd',
-  background: '#111',
-  color: '#fff',
-  cursor: 'pointer',
-};
-const linkBtn: React.CSSProperties = {
-  display: 'inline-block',
-  padding: '8px 12px',
-  border: '1px solid #ddd',
-  borderRadius: 8,
-  background: '#f8f8f8',
-  textDecoration: 'none',
-  color: '#111',
-};
-const dangerBtn: React.CSSProperties = {
-  height: 30,
-  padding: '0 10px',
-  borderRadius: 8,
-  border: '1px solid #f1d0d0',
-  background: '#ffeaea',
-  color: '#b40000',
-  cursor: 'pointer',
-};

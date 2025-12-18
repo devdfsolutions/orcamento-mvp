@@ -26,14 +26,19 @@ function docMask(v?: string | null) {
   return v;
 }
 
-export default async function Page({
-  searchParams,
-}: { searchParams?: { e?: string; ok?: string } }) {
+type SP = Record<string, string | string[] | undefined>;
+type Props = { searchParams?: Promise<SP> };
+
+export default async function Page({ searchParams }: Props) {
+  const sp = (await searchParams) ?? {};
   const me = await getAuthUser(true);
   if (!me) redirect("/login");
 
+  const e = Array.isArray(sp.e) ? sp.e[0] : sp.e;
+  const okParam = Array.isArray(sp.ok) ? sp.ok[0] : sp.ok;
+
   // limpa URL se vier com NEXT_REDIRECT
-  if (searchParams?.e === "NEXT_REDIRECT") {
+  if (e === "NEXT_REDIRECT") {
     redirect("/cadastros/fornecedores");
   }
 
@@ -43,10 +48,8 @@ export default async function Page({
     select: { id: true, nome: true, cnpjCpf: true, contato: true },
   });
 
-  const rawErr = searchParams?.e ?? null;
-  const msgErro =
-    rawErr && rawErr !== "NEXT_REDIRECT" ? decodeURIComponent(rawErr) : null;
-  const ok = searchParams?.ok === "1";
+  const msgErro = e && e !== "NEXT_REDIRECT" ? decodeURIComponent(String(e)) : null;
+  const ok = okParam === "1";
 
   return (
     <main className="max-w-[900px] mr-auto ml-6 p-6 grid gap-5">
@@ -78,8 +81,20 @@ export default async function Page({
           <PendingOverlay />
           <PendingFieldset>
             <input name="nome" placeholder="Razão/Nome" required className="input" />
-            <DocInput name="cnpjCpf" placeholder="CNPJ/CPF (apenas números)" className="input" />
-            <input name="contato" placeholder="Contato (tel/email/obs)" className="input" />
+
+            <DocInput
+              name="cnpjCpf"
+              placeholder="CNPJ/CPF"
+              required
+              className="input"
+            />
+
+            <input
+              name="contato"
+              placeholder="Contato (tel/email/obs)"
+              className="input"
+            />
+
             <SubmitButton className="btn btn-primary">Salvar</SubmitButton>
           </PendingFieldset>
         </form>
@@ -133,6 +148,7 @@ export default async function Page({
                         name="cnpjCpf"
                         defaultValue={f.cnpjCpf ?? ""}
                         placeholder="CNPJ/CPF"
+                        required
                         className="cell-edit input input-sm w-full"
                       />
                     </td>
@@ -163,13 +179,22 @@ export default async function Page({
 
                       <form action={excluirFornecedor} className="inline ml-2 align-middle">
                         <input type="hidden" name="id" value={f.id} />
-                        <ConfirmSubmit className="btn btn-danger btn-sm" message="Excluir este fornecedor?">
+                        <ConfirmSubmit
+                          className="btn btn-danger btn-sm"
+                          message="Excluir este fornecedor?"
+                        >
                           Excluir
                         </ConfirmSubmit>
                       </form>
 
                       {/* form oculto para receber inputs via atributo `form` */}
-                      <AutoCloseForm id={formId} action={atualizarFornecedor} className="hidden">
+                      <AutoCloseForm
+                        id={formId}
+                        action={atualizarFornecedor}
+                        rowId={rowId}
+                        detailsId={detailsId}
+                        className="hidden"
+                      >
                         <input type="hidden" name="id" value={f.id} />
                       </AutoCloseForm>
 
@@ -190,7 +215,6 @@ export default async function Page({
           </table>
         </div>
 
-        {/* estilos locais */}
         <style>{`
           :root{
             --bg:#fff; --border:#e6e7eb; --muted:#f7f7fb;
@@ -231,7 +255,6 @@ export default async function Page({
           }
           .table tbody tr:hover td{ background:#fafafa; }
 
-          /* inline edit */
           .cell-edit{ display:none; }
           tr.editing .cell-view{ display:none; }
           tr.editing .cell-edit{ display:block; }

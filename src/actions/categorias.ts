@@ -4,10 +4,6 @@ import { prisma } from "@/lib/prisma";
 import { getSupabaseServer } from "@/lib/supabaseServer";
 import { redirect } from "next/navigation";
 
-function normSigla(v: string) {
-  return v.trim();
-}
-
 function normNome(v: string) {
   return v.trim();
 }
@@ -29,59 +25,54 @@ async function getUsuarioIdOrRedirect(): Promise<number> {
   return me.id;
 }
 
-export async function criarUnidade(formData: FormData) {
+export async function criarCategoria(formData: FormData) {
   const usuarioId = await getUsuarioIdOrRedirect();
 
-  const sigla = normSigla(String(formData.get("sigla") ?? ""));
   const nome = normNome(String(formData.get("nome") ?? ""));
-
-  if (!sigla || !nome) {
+  if (!nome) {
     redirect(
-      "/cadastros/unidades?e=" +
-        encodeURIComponent("Preencha sigla e nome.")
+      "/cadastros/categorias?e=" + encodeURIComponent("Preencha o nome.")
     );
   }
 
   try {
     const now = new Date();
 
-    await prisma.unidadeMedida.upsert({
-      where: { usuarioId_sigla: { usuarioId, sigla } },
-      update: {
-        nome,
-        updatedAt: now,
-      },
+    await prisma.categoria.upsert({
+      where: { usuarioId_nome: { usuarioId, nome } },
+      update: { updatedAt: now },
       create: {
         usuarioId,
-        sigla,
         nome,
         updatedAt: now,
       },
     });
 
-    redirect("/cadastros/unidades?ok=1");
+    redirect("/cadastros/categorias?ok=1");
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Erro ao salvar unidade.";
-    redirect("/cadastros/unidades?e=" + encodeURIComponent(msg));
+    const msg =
+      err instanceof Error ? err.message : "Erro ao salvar categoria.";
+    redirect("/cadastros/categorias?e=" + encodeURIComponent(msg));
   }
 }
 
-export async function excluirUnidade(formData: FormData) {
+export async function excluirCategoria(formData: FormData) {
   const usuarioId = await getUsuarioIdOrRedirect();
   const id = Number(formData.get("id"));
 
   if (!id || Number.isNaN(id)) {
-    redirect("/cadastros/unidades?e=" + encodeURIComponent("ID inválido."));
+    redirect("/cadastros/categorias?e=" + encodeURIComponent("ID inválido."));
   }
 
   try {
-    await prisma.unidadeMedida.delete({
+    await prisma.categoria.delete({
       where: { id, usuarioId },
     });
 
-    redirect("/cadastros/unidades?ok=1");
+    redirect("/cadastros/categorias?ok=1");
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Erro ao excluir unidade.";
-    redirect("/cadastros/unidades?e=" + encodeURIComponent(msg));
+    const msg =
+      err instanceof Error ? err.message : "Erro ao excluir categoria.";
+    redirect("/cadastros/categorias?e=" + encodeURIComponent(msg));
   }
 }

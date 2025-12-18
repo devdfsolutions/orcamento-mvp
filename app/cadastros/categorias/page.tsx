@@ -5,7 +5,7 @@ export const runtime = "nodejs";
 import { prisma } from "@/lib/prisma";
 import { getSupabaseServer } from "@/lib/supabaseServer";
 import { redirect } from "next/navigation";
-import { criarUnidade, excluirUnidade } from "@/actions/unidades";
+import { criarCategoria, excluirCategoria } from "@/actions/categorias";
 import ConfirmSubmit from "@/components/ConfirmSubmit";
 import {
   PendingFieldset,
@@ -33,12 +33,13 @@ export default async function Page({ searchParams }: PageProps) {
   if (!me) redirect("/login");
 
   if (params?.e === "NEXT_REDIRECT") {
-    redirect("/cadastros/unidades");
+    redirect("/cadastros/categorias");
   }
 
-  const unidades = await prisma.unidadeMedida.findMany({
+  const categorias = await prisma.categoria.findMany({
     where: { usuarioId: me.id },
-    orderBy: { sigla: "asc" },
+    orderBy: { nome: "asc" },
+    select: { id: true, nome: true },
   });
 
   const rawErr = params?.e ? decodeURIComponent(params.e) : null;
@@ -48,7 +49,7 @@ export default async function Page({ searchParams }: PageProps) {
   return (
     <main className="max-w-[980px] mr-auto ml-6 p-6 grid gap-5">
       <h1 className="text-2xl font-semibold text-zinc-900">
-        cadastros<span className="text-zinc-400">/</span>unidades
+        cadastros<span className="text-zinc-400">/</span>categorias
       </h1>
 
       {msgErro && (
@@ -64,24 +65,18 @@ export default async function Page({ searchParams }: PageProps) {
 
       <section className="card relative">
         <div className="card-head mb-2">
-          <h2>Nova unidade</h2>
+          <h2>Nova categoria</h2>
         </div>
 
         <form
-          action={criarUnidade}
-          className="grid gap-2 items-center grid-cols-[220px_1fr_auto]"
+          action={criarCategoria}
+          className="grid gap-2 items-center grid-cols-[1fr_auto]"
         >
           <PendingOverlay />
           <PendingFieldset>
             <input
-              name="sigla"
-              placeholder="Sigla (ex: m², m, cm, un, h)"
-              required
-              className="input"
-            />
-            <input
               name="nome"
-              placeholder="Nome (ex: Metro quadrado)"
+              placeholder="Nome da categoria (ex: Materiais, Elétrica, Ferramentas...)"
               required
               className="input"
             />
@@ -94,28 +89,28 @@ export default async function Page({ searchParams }: PageProps) {
         <div className="table-wrap">
           <table className="table w-full">
             <colgroup>
-              <col style={{ width: "160px" }} />
               <col />
               <col style={{ width: "110px" }} />
             </colgroup>
             <thead>
               <tr>
-                {["Sigla", "Nome", "Ações"].map((h) => (
+                {["Nome", "Ações"].map((h) => (
                   <th key={h}>{h}</th>
                 ))}
               </tr>
             </thead>
+
             <tbody>
-              {unidades.map((u) => (
-                <tr key={u.id}>
-                  <td className="font-medium text-zinc-900">{u.sigla}</td>
-                  <td className="break-words">{u.nome}</td>
+              {categorias.map((c) => (
+                <tr key={c.id}>
+                  <td className="font-medium text-zinc-900">{c.nome}</td>
+
                   <td className="text-right whitespace-nowrap">
-                    <form action={excluirUnidade} className="inline-block">
-                      <input type="hidden" name="id" value={String(u.id)} />
+                    <form action={excluirCategoria} className="inline-block">
+                      <input type="hidden" name="id" value={String(c.id)} />
                       <ConfirmSubmit
                         className="btn btn-danger btn-sm"
-                        message="Excluir esta unidade?"
+                        message="Excluir esta categoria?"
                       >
                         Excluir
                       </ConfirmSubmit>
@@ -124,10 +119,10 @@ export default async function Page({ searchParams }: PageProps) {
                 </tr>
               ))}
 
-              {unidades.length === 0 && (
+              {categorias.length === 0 && (
                 <tr>
-                  <td colSpan={3} className="text-center text-zinc-500 py-8">
-                    Nenhuma unidade cadastrada.
+                  <td colSpan={2} className="text-center text-zinc-500 py-8">
+                    Nenhuma categoria cadastrada.
                   </td>
                 </tr>
               )}
@@ -172,7 +167,7 @@ export default async function Page({ searchParams }: PageProps) {
       </section>
 
       <p className="text-xs text-zinc-500">
-        Dica: use <b>sigla</b> como chave (é única por usuário). Repetir a sigla atualiza o nome.
+        Dica: nome é único por usuário. Repetir o nome atualiza.
       </p>
     </main>
   );

@@ -1,95 +1,155 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
+import { getSupabaseServer } from "@/lib/supabaseServer";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { getSupabaseServer } from "@/lib/supabaseServer";
 
-const PAGE = "/cadastros/produtos";
-
-function backWithError(err: unknown) {
-  const msg =
-    (err as any)?.message ??
-    (typeof err === "string" ? err : "Erro inesperado ao salvar.");
-  console.error("[produtos action]", err);
-  redirect(`${PAGE}?e=${encodeURIComponent(msg)}`);
+function toInt(v: FormDataEntryValue | null) {
+  const n = Number(v ?? "");
+  return Number.isFinite(n) ? n : NaN;
 }
 
-async function meId() {
+function normStr(v: FormDataEntryValue | null) {
+  const s = String(v ?? "").trim();
+  return s.length ? s : "";
+}
+
+async function requireMe() {
   const supabase = await getSupabaseServer();
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) redirect("/login");
+
   const me = await prisma.usuario.findUnique({
     where: { supabaseUserId: user.id },
     select: { id: true },
   });
   if (!me) redirect("/login");
+
   return me.id;
 }
 
-export async function criarProduto(formData: FormData) {
-  try {
-    const usuarioId = await meId();
-    const nome = String(formData.get("nome") || "").trim();
-    const tipo = String(formData.get("tipo") || "AMBOS") as
-      | "PRODUTO" | "SERVICO" | "AMBOS";
-    const unidadeMedidaId = Number(formData.get("unidadeMedidaId"));
-    const categoria = String(formData.get("categoria") || "").trim() || null;
+async function getOrCreateCategoria(usuarioId: number, nomeRaw: string) {
+  const nome = (nomeRaw || "").trim() || "Geral";
 
-    if (!nome) throw new Error("Informe o nome.");
-    if (!unidadeMedidaId) throw new Error("Selecione a unidade de medida.");
+  const existing = await prisma.categoria.findFirst({
+    where: { usuarioId, nome },
+    select: { id: true },
+  });
+  if (existing) return existing.id;
+
+  const created = await prisma.categoria.create({
+    data: {
+      usuarioId,
+      nome,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+    select: { id: true },
+  });
+
+  return created.id;
+}
+
+/** CREATE (pode redirect pq vem do form do Server Component) */
+export async function criarProduto(formData: FormData) {
+  const usuarioId = await requireMe();
+
+  const nome = normStr(formData.get("nome"));
+  const tipo = normStr(formData.get("tipo")) as "PRODUTO" | "SERVICO" | "AMBOS";
+  const unidadeMedidaId = toInt(formData.get("unidadeMedidaId"));
+
+  // ✅ suportar os 2 jeitos: select (categoriaId) e legado (categoria texto)
+  const categoriaIdFromSelect = toInt(formData.get("categoriaId"));
+  const categoriaNomeLegacy = normStr(formData.get("categoria"));
+
+  if (!nome) redirect("/cadastros/produtos?e=" + encodeURIComponent("Preencha o nome."));
+  if (!["PRODUTO", "SERVICO", "AMBOS"].includes(tipo))
+    redirect("/cadastros/produtos?e=" + encodeURIComponent("Tipo inválido."));
+  if (!Number.isFinite(unidadeMedidaId))
+    redirect("/cadastros/produtos?e=" + encodeURIComponent("Selecione a unidade de medida."));
+
+  try {
+    // ✅ categoriaId é obrigatório => sempre resolve um number
+    const categoriaId = Number.isFinite(categoriaIdFromSelect)
+      ? categoriaIdFromSelect
+      : await getOrCreateCategoria(usuarioId, categoriaNomeLegacy || "Geral");
 
     await prisma.produtoServico.create({
-      data: { usuarioId, nome, tipo, unidadeMedidaId, categoria },
+      data: {
+        usuarioId,
+        nome,
+        tipo,
+        unidadeMedidaId,
+        categoriaId, // ✅ sempre number
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
     });
 
-    revalidatePath(PAGE);
-    redirect(`${PAGE}?ok=1`);
+    revalidatePath("/cadastros/produtos");
+    redirect("/cadastros/produtos?ok=1");
   } catch (err) {
-    backWithError(err);
+    const msg = err instanceof Error ? err.message : "Erro ao criar produto/serviço.";
+    redirect("/cadastros/produtos?e=" + encodeURIComponent(msg));
   }
 }
 
+/** UPDATE (NÃO pode redirect — é chamado pelo Client) */
 export async function atualizarProduto(formData: FormData) {
-  try {
-    const usuarioId = await meId();
-    const id = Number(formData.get("id"));
-    const nome = String(formData.get("nome") || "").trim();
-    const tipo = String(formData.get("tipo") || "AMBOS") as
-      | "PRODUTO" | "SERVICO" | "AMBOS";
-    const unidadeMedidaId = Number(formData.get("unidadeMedidaId"));
-    const categoria = String(formData.get("categoria") || "").trim() || null;
+  const usuarioId = await requireMe();
 
-    if (!id) throw new Error("ID inválido.");
-    if (!nome) throw new Error("Informe o nome.");
-    if (!unidadeMedidaId) throw new Error("Selecione a unidade de medida.");
+  const id = toInt(formData.get("id"));
+  const nome = normStr(formData.get("nome"));
+  const tipo = normStr(formData.get("tipo")) as "PRODUTO" | "SERVICO" | "AMBOS";
+  const unidadeMedidaId = toInt(formData.get("unidadeMedidaId"));
 
-    // garante escopo
-    await prisma.produtoServico.updateMany({
-      where: { id, usuarioId },
-      data: { nome, tipo, unidadeMedidaId, categoria },
-    });
+  const categoriaIdFromSelect = toInt(formData.get("categoriaId"));
+  const categoriaNomeLegacy = normStr(formData.get("categoria"));
 
-    revalidatePath(PAGE);
-    redirect(`${PAGE}?ok=1`);
-  } catch (err) {
-    backWithError(err);
-  }
+  if (!Number.isFinite(id)) throw new Error("ID inválido.");
+  if (!nome) throw new Error("Preencha o nome.");
+  if (!["PRODUTO", "SERVICO", "AMBOS"].includes(tipo)) throw new Error("Tipo inválido.");
+  if (!Number.isFinite(unidadeMedidaId)) throw new Error("Selecione a unidade de medida.");
+
+  // garante que é do usuário
+  const exists = await prisma.produtoServico.findFirst({
+    where: { id, usuarioId },
+    select: { id: true },
+  });
+  if (!exists) throw new Error("Produto/serviço não encontrado.");
+
+  // ✅ categoriaId obrigatório => sempre resolve um number
+  const categoriaId = Number.isFinite(categoriaIdFromSelect)
+    ? categoriaIdFromSelect
+    : await getOrCreateCategoria(usuarioId, categoriaNomeLegacy || "Geral");
+
+  await prisma.produtoServico.update({
+    where: { id },
+    data: {
+      nome,
+      tipo,
+      unidadeMedidaId,
+      categoriaId, // ✅ sempre number
+      updatedAt: new Date(),
+    },
+  });
+
+  revalidatePath("/cadastros/produtos");
 }
 
+/** DELETE (NÃO pode redirect — é chamado pelo Client) */
 export async function excluirProduto(formData: FormData) {
-  try {
-    const usuarioId = await meId();
-    const id = Number(formData.get("id"));
-    if (!id) throw new Error("ID inválido.");
+  const usuarioId = await requireMe();
 
-    await prisma.produtoServico.deleteMany({
-      where: { id, usuarioId },
-    });
+  const id = toInt(formData.get("id"));
+  if (!Number.isFinite(id)) throw new Error("ID inválido.");
 
-    revalidatePath(PAGE);
-    redirect(`${PAGE}?ok=1`);
-  } catch (err) {
-    backWithError(err);
-  }
+  await prisma.produtoServico.deleteMany({
+    where: { id, usuarioId },
+  });
+
+  revalidatePath("/cadastros/produtos");
 }

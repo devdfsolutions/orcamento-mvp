@@ -1,4 +1,5 @@
 import React from "react";
+import Link from "next/link";
 import ConfirmSubmit from "@/components/ConfirmSubmit";
 import AutoCloseForm from "@/components/AutoCloseForm";
 import { prisma } from "@/lib/prisma";
@@ -11,7 +12,11 @@ import {
 } from "@/actions/clientes";
 import MaskedInput from "@/components/MaskedInput";
 import ToggleRowEditing from "@/components/ToggleRowEditing";
-import { PendingFieldset, SubmitButton, PendingOverlay } from "@/components/FormPending";
+import {
+  PendingFieldset,
+  SubmitButton,
+  PendingOverlay,
+} from "@/components/FormPending";
 
 export const dynamic = "force-dynamic";
 
@@ -28,12 +33,18 @@ const formatCNPJ = (v?: string | null) => {
   return d.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
 };
 
-type PageProps = { searchParams?: { p?: string } };
+type PageProps = {
+  searchParams?: Promise<{ p?: string }>;
+};
 
 export default async function Page({ searchParams }: PageProps) {
+  const params = await searchParams;
+
   // auth
   const supabase = await getSupabaseServer();
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
   const me = await prisma.usuario.findUnique({
@@ -44,7 +55,7 @@ export default async function Page({ searchParams }: PageProps) {
 
   // paginação
   const pageSize = 50;
-  const page = Math.max(1, Number(searchParams?.p ?? "1"));
+  const page = Math.max(1, Number(params?.p ?? "1"));
   const skip = (page - 1) * pageSize;
 
   const [total, clientes] = await Promise.all([
@@ -60,6 +71,7 @@ export default async function Page({ searchParams }: PageProps) {
         email: true,
         telefone: true,
         endereco: true,
+        responsavel: true, // ✅ NOVO
       },
       take: pageSize,
       skip,
@@ -81,12 +93,8 @@ export default async function Page({ searchParams }: PageProps) {
         </div>
 
         <form action={criarClienteUsuario} className="grid gap-2 md:grid-cols-4">
-          {/* overlay bloqueia clicks durante submit */}
           <PendingOverlay />
-
           <PendingFieldset>
-            {/* REMOVIDO: <input type="hidden" name="usuarioId" value={me.id} /> */}
-
             <input name="nome" placeholder="Nome" required className="input" />
 
             <MaskedInput
@@ -105,12 +113,36 @@ export default async function Page({ searchParams }: PageProps) {
               mask="cnpj"
               className="input"
             />
-            <input name="email" placeholder="E-mail (opcional)" type="email" className="input" />
-            <input name="telefone" placeholder="Telefone (opcional)" className="input" />
-            <input name="endereco" placeholder="Endereço (opcional)" className="input md:col-span-2" />
+
+            <input
+              name="email"
+              placeholder="E-mail (opcional)"
+              type="email"
+              className="input"
+            />
+
+            <input
+              name="telefone"
+              placeholder="Telefone (opcional)"
+              className="input"
+            />
+
+            <input
+              name="responsavel"
+              placeholder="Responsável (opcional)"
+              className="input"
+            />
+
+            <input
+              name="endereco"
+              placeholder="Endereço (opcional)"
+              className="input md:col-span-2"
+            />
 
             <div className="md:col-span-4 flex justify-start pt-1">
-              <SubmitButton className="btn btn-primary">Adicionar Novo</SubmitButton>
+              <SubmitButton className="btn btn-primary">
+                Adicionar Novo
+              </SubmitButton>
             </div>
           </PendingFieldset>
         </form>
@@ -121,19 +153,34 @@ export default async function Page({ searchParams }: PageProps) {
         <div className="table-wrap">
           <table className="table w-full">
             <colgroup>
-              <col style={{ width: "56px" }} />      {/* ID */}
-              <col style={{ width: "22%" }} />       {/* Nome */}
-              <col style={{ width: "15%" }} />       {/* CPF */}
-              <col style={{ width: "18%" }} />       {/* CNPJ */}
-              <col style={{ width: "18%" }} />       {/* E-mail */}
-              <col style={{ width: "12%" }} />       {/* Telefone */}
-              <col />                                 {/* Endereço (flex) */}
-              <col style={{ width: "110px" }} />     {/* Ações */}
+              {[
+                { w: "56px" },  // ID
+                { w: "18%" },   // Nome
+                { w: "14%" },   // CPF
+                { w: "16%" },   // CNPJ
+                { w: "16%" },   // Email
+                { w: "12%" },   // Telefone
+                { w: "14%" },   // Responsável
+                { w: undefined }, // Endereço
+                { w: "110px" }, // Ações
+              ].map((c, i) => (
+                <col key={i} style={c.w ? { width: c.w } : undefined} />
+              ))}
             </colgroup>
 
             <thead>
               <tr>
-                {["ID","Nome","CPF","CNPJ","E-mail","Telefone","Endereço","Ações"].map((h) => (
+                {[
+                  "ID",
+                  "Nome",
+                  "CPF",
+                  "CNPJ",
+                  "E-mail",
+                  "Telefone",
+                  "Responsável",
+                  "Endereço",
+                  "Ações",
+                ].map((h) => (
                   <th key={h}>{h}</th>
                 ))}
               </tr>
@@ -144,57 +191,135 @@ export default async function Page({ searchParams }: PageProps) {
                 const detailsId = `det-${c.id}`;
                 const rowId = `row-${c.id}`;
                 const formId = `edit-${c.id}`;
+
                 return (
                   <tr key={c.id} id={rowId}>
-                    <td><span className="cell-view">{c.id}</span></td>
+                    <td>
+                      <span className="cell-view">{c.id}</span>
+                    </td>
 
                     <td>
-                      <span className="cell-view font-medium text-zinc-900">{c.nome}</span>
-                      <input form={formId} name="nome" defaultValue={c.nome} className="cell-edit input input-sm w-full" required />
+                      <span className="cell-view font-medium text-zinc-900">
+                        {c.nome}
+                      </span>
+                      <input
+                        form={formId}
+                        name="nome"
+                        defaultValue={c.nome}
+                        className="cell-edit input input-sm w-full"
+                        required
+                      />
                     </td>
 
                     <td>
                       <span className="cell-view">{formatCPF(c.cpf)}</span>
-                      <MaskedInput form={formId} name="cpf" defaultValue={c.cpf ?? ""} placeholder="CPF" inputMode="numeric" maxLength={14} mask="cpf" className="cell-edit input input-sm w-full" />
+                      <MaskedInput
+                        form={formId}
+                        name="cpf"
+                        defaultValue={c.cpf ?? ""}
+                        placeholder="CPF"
+                        inputMode="numeric"
+                        maxLength={14}
+                        mask="cpf"
+                        className="cell-edit input input-sm w-full"
+                      />
                     </td>
 
                     <td>
                       <span className="cell-view">{formatCNPJ(c.cnpj)}</span>
-                      <MaskedInput form={formId} name="cnpj" defaultValue={c.cnpj ?? ""} placeholder="CNPJ" inputMode="numeric" maxLength={18} mask="cnpj" className="cell-edit input input-sm w-full" />
+                      <MaskedInput
+                        form={formId}
+                        name="cnpj"
+                        defaultValue={c.cnpj ?? ""}
+                        placeholder="CNPJ"
+                        inputMode="numeric"
+                        maxLength={18}
+                        mask="cnpj"
+                        className="cell-edit input input-sm w-full"
+                      />
                     </td>
 
                     <td className="break-words">
                       <span className="cell-view">{c.email ?? "—"}</span>
-                      <input form={formId} name="email" defaultValue={c.email ?? ""} placeholder="E-mail" type="email" className="cell-edit input input-sm w-full" />
+                      <input
+                        form={formId}
+                        name="email"
+                        defaultValue={c.email ?? ""}
+                        placeholder="E-mail"
+                        type="email"
+                        className="cell-edit input input-sm w-full"
+                      />
                     </td>
 
                     <td className="whitespace-nowrap">
                       <span className="cell-view">{c.telefone ?? "—"}</span>
-                      <input form={formId} name="telefone" defaultValue={c.telefone ?? ""} placeholder="Telefone" className="cell-edit input input-sm w-full" />
+                      <input
+                        form={formId}
+                        name="telefone"
+                        defaultValue={c.telefone ?? ""}
+                        placeholder="Telefone"
+                        className="cell-edit input input-sm w-full"
+                      />
+                    </td>
+
+                    <td className="break-words">
+                      <span className="cell-view">{c.responsavel ?? "—"}</span>
+                      <input
+                        form={formId}
+                        name="responsavel"
+                        defaultValue={c.responsavel ?? ""}
+                        placeholder="Responsável"
+                        className="cell-edit input input-sm w-full"
+                      />
                     </td>
 
                     <td className="break-words">
                       <span className="cell-view">{c.endereco ?? "—"}</span>
-                      <input form={formId} name="endereco" defaultValue={c.endereco ?? ""} placeholder="Endereço" className="cell-edit input input-sm w-full" />
+                      <input
+                        form={formId}
+                        name="endereco"
+                        defaultValue={c.endereco ?? ""}
+                        placeholder="Endereço"
+                        className="cell-edit input input-sm w-full"
+                      />
                     </td>
 
                     <td className="text-right whitespace-nowrap">
-                      <details id={detailsId} className="inline-block mr-2 align-middle">
+                      <details
+                        id={detailsId}
+                        className="inline-block mr-2 align-middle"
+                      >
                         <summary className="pill">Editar</summary>
                       </details>
 
-                      <button type="submit" form={formId} className="btn btn-primary btn-sm save-btn align-middle">
+                      <button
+                        type="submit"
+                        form={formId}
+                        className="btn btn-primary btn-sm save-btn align-middle"
+                      >
                         Salvar
                       </button>
 
-                      <form action={excluirClienteUsuario} className="inline ml-2 align-middle">
+                      <form
+                        action={excluirClienteUsuario}
+                        className="inline ml-2 align-middle"
+                      >
                         <input type="hidden" name="id" value={c.id} />
-                        <ConfirmSubmit className="btn btn-danger btn-sm" message="Excluir este cliente?">
+                        <ConfirmSubmit
+                          className="btn btn-danger btn-sm"
+                          message="Excluir este cliente?"
+                        >
                           Excluir
                         </ConfirmSubmit>
                       </form>
 
-                      <AutoCloseForm id={formId} action={atualizarClienteUsuario} className="hidden">
+                      <AutoCloseForm
+                        id={formId}
+                        action={atualizarClienteUsuario}
+                        rowId={rowId}
+                        detailsId={detailsId}
+                        className="hidden"
+                      >
                         <input type="hidden" name="id" value={c.id} />
                       </AutoCloseForm>
 
@@ -206,7 +331,7 @@ export default async function Page({ searchParams }: PageProps) {
 
               {clientes.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="text-center text-zinc-500 py-8">
+                  <td colSpan={9} className="text-center text-zinc-500 py-8">
                     Nenhum cliente cadastrado.
                   </td>
                 </tr>
@@ -215,7 +340,6 @@ export default async function Page({ searchParams }: PageProps) {
           </table>
         </div>
 
-        {/* estilos compactos + linha única com scroll horizontal */}
         <style>{`
           :root{
             --bg:#fff; --border:#e6e7eb; --muted:#f7f7fb;
@@ -244,7 +368,6 @@ export default async function Page({ searchParams }: PageProps) {
           .pill{ display:inline-block; padding:5px 10px; border-radius:9999px; border:1px solid var(--border); background:var(--muted); color:var(--text); cursor:pointer; font-size:.85rem; }
           .pill:hover{ background:#eef2ff; border-color:#dfe3f1; }
 
-          /* Tabela em uma linha (nowrap) + scroll horizontal */
           .table-wrap{ overflow-x:auto; }
           .table{ border-collapse:collapse; width:100%; font-size:.95rem; }
           .table thead th{
@@ -257,7 +380,6 @@ export default async function Page({ searchParams }: PageProps) {
           }
           .table tbody tr:hover td{ background:#fafafa; }
 
-          /* inputs */
           .table input, .table .input{ width:100%; max-width:100%; min-width:0; box-sizing:border-box; }
           tr.editing td{ white-space:normal; }
 
@@ -275,12 +397,22 @@ export default async function Page({ searchParams }: PageProps) {
         <span className="text-sm text-zinc-500">
           {total} registro(s) • página {page} de {totalPages}
         </span>
-        <a href={`?p=${Math.max(1, page - 1)}`} aria-disabled={page <= 1} className={`btn btn-sm ${page <= 1 ? "opacity-40 pointer-events-none" : ""}`}>
+
+        <Link
+          href={`?p=${Math.max(1, page - 1)}`}
+          aria-disabled={page <= 1}
+          className={`btn btn-sm ${page <= 1 ? "opacity-40 pointer-events-none" : ""}`}
+        >
           Anterior
-        </a>
-        <a href={`?p=${Math.min(totalPages, page + 1)}`} aria-disabled={page >= totalPages} className={`btn btn-sm ${page >= totalPages ? "opacity-40 pointer-events-none" : ""}`}>
+        </Link>
+
+        <Link
+          href={`?p=${Math.min(totalPages, page + 1)}`}
+          aria-disabled={page >= totalPages}
+          className={`btn btn-sm ${page >= totalPages ? "opacity-40 pointer-events-none" : ""}`}
+        >
           Próxima
-        </a>
+        </Link>
       </nav>
     </main>
   );

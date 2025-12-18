@@ -1,32 +1,235 @@
-// prisma/schema.prisma
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
-/* =========================
-   ENUMS
-   ========================= */
-enum TipoItem {
-  PRODUTO
-  SERVICO
-  AMBOS
+model Usuario {
+  id             Int      @id @default(autoincrement())
+  supabaseUserId String   @unique
+  nome           String
+  cpf            String?
+  email          String   @unique
+  telefone       String?
+  cnpj           String?
+  role           Role     @default(USER)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  Categoria         Categoria[]
+  ClienteUsuario    ClienteUsuario[]
+  Estimativa        Estimativa[]
+  EstimativaItem    EstimativaItem[]
+  Fornecedor        Fornecedor[]
+  FornecedorProduto FornecedorProduto[]
+  ProdutoServico    ProdutoServico[]
+  Projeto           Projeto[]
+  UnidadeMedida     UnidadeMedida[]
+
+  @@unique([cpf])
+  @@index([email])
 }
 
-enum FontePrecoMaterial {
-  P1
-  P2
-  P3
+model Categoria {
+  id        Int      @id @default(autoincrement())
+  usuarioId Int
+  nome      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  Usuario        Usuario          @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  ProdutoServico ProdutoServico[]
+
+  @@unique([usuarioId, nome])
+  @@index([usuarioId])
 }
 
-enum FontePrecoMO {
-  M1
-  M2
-  M3
+model ClienteUsuario {
+  id        Int     @id @default(autoincrement())
+  usuarioId Int
+  nome      String
+  cpf       String?
+  cnpj      String?
+  email     String?
+  telefone  String?
+  endereco  String?
+  responsavel String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  usuario  Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  projetos Projeto[]
+
+  @@unique([usuarioId, cpf])
+  @@unique([usuarioId, cnpj])
+  @@unique([usuarioId, email])
+  @@index([usuarioId])
+  @@index([usuarioId, nome])
+}
+
+model UnidadeMedida {
+  id        Int      @id @default(autoincrement())
+  usuarioId Int
+  sigla     String
+  nome      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  Usuario        Usuario          @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  EstimativaItem EstimativaItem[]
+  ProdutoServico ProdutoServico[]
+
+  @@unique([usuarioId, sigla])
+  @@index([usuarioId])
+}
+
+model ProdutoServico {
+  id              Int      @id @default(autoincrement())
+  usuarioId       Int
+  categoriaId     Int
+  unidadeMedidaId Int
+  nome            String
+  tipo            TipoItem @default(AMBOS)
+  refPrecoP1      Decimal? @db.Decimal(12, 2)
+  refPrecoP2      Decimal? @db.Decimal(12, 2)
+  refPrecoP3      Decimal? @db.Decimal(12, 2)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  Usuario           Usuario             @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  Categoria         Categoria           @relation(fields: [categoriaId], references: [id])
+  UnidadeMedida     UnidadeMedida       @relation(fields: [unidadeMedidaId], references: [id])
+  EstimativaItem    EstimativaItem[]
+  FornecedorProduto FornecedorProduto[]
+
+  @@index([usuarioId])
+  @@index([usuarioId, nome])
+}
+
+model Projeto {
+  id        Int    @id @default(autoincrement())
+  usuarioId Int
+  nome      String
+  status    String @default("rascunho")
+
+  clienteId Int?
+  cliente   ClienteUsuario? @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  usuario     Usuario      @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  estimativas Estimativa[]
+
+  // ✅ CAMPO INVERSO
+  resumo ResumoProjeto?
+
+  @@index([usuarioId])
+  @@index([clienteId])
+}
+
+model Estimativa {
+  id        Int @id @default(autoincrement())
+  usuarioId Int
+  projetoId Int
+
+  nome     String  @default("Estimativa")
+  aprovada Boolean @default(false)
+
+  criadaEm  DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  projeto Projeto @relation(fields: [projetoId], references: [id], onDelete: Cascade)
+
+  // ✅ CAMPO INVERSO OBRIGATÓRIO
+  itens EstimativaItem[]
+
+  @@index([usuarioId])
+  @@index([projetoId])
+}
+
+model EstimativaItem {
+  id            Int                 @id @default(autoincrement())
+  usuarioId     Int
+  estimativaId  Int
+  produtoId     Int
+  unidadeId     Int
+  fornecedorId  Int?
+  // exemplo: model EstimativaItem { ... }
+  ajusteTipo    String? // "percent" | "fixo"
+  ajusteValor   Decimal?            @db.Decimal(14, 2)
+  quantidade    Decimal             @db.Decimal(12, 3)
+  valorUnitMat  Decimal?            @db.Decimal(12, 2)
+  valorUnitMo   Decimal?            @db.Decimal(12, 2)
+  totalItem     Decimal?            @db.Decimal(12, 2)
+  fontePrecoMat FontePrecoMaterial?
+  fontePrecoMo  FontePrecoMO?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  Usuario        Usuario        @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  Estimativa     Estimativa     @relation(fields: [estimativaId], references: [id], onDelete: Cascade)
+  ProdutoServico ProdutoServico @relation(fields: [produtoId], references: [id])
+  UnidadeMedida  UnidadeMedida  @relation(fields: [unidadeId], references: [id])
+  Fornecedor     Fornecedor?    @relation(fields: [fornecedorId], references: [id])
+
+  @@index([usuarioId])
+  @@index([estimativaId])
+}
+
+model Fornecedor {
+  id        Int      @id @default(autoincrement())
+  usuarioId Int
+  nome      String
+  cnpjCpf   String
+  contato   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  Usuario           Usuario             @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  EstimativaItem    EstimativaItem[]
+  FornecedorProduto FornecedorProduto[]
+
+  @@unique([usuarioId, cnpjCpf])
+  @@index([usuarioId])
+}
+
+model FornecedorProduto {
+  id           Int      @id @default(autoincrement())
+  usuarioId    Int
+  fornecedorId Int
+  produtoId    Int
+  precoMatP1   Decimal? @db.Decimal(12, 2)
+  precoMatP2   Decimal? @db.Decimal(12, 2)
+  precoMatP3   Decimal? @db.Decimal(12, 2)
+  precoMoM1    Decimal? @db.Decimal(12, 2)
+  precoMoM2    Decimal? @db.Decimal(12, 2)
+  precoMoM3    Decimal? @db.Decimal(12, 2)
+  observacao   String?
+  dataUltAtual DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  Usuario        Usuario        @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  Fornecedor     Fornecedor     @relation(fields: [fornecedorId], references: [id], onDelete: Cascade)
+  ProdutoServico ProdutoServico @relation(fields: [produtoId], references: [id], onDelete: Cascade)
+
+  @@unique([usuarioId, fornecedorId, produtoId])
+}
+
+model ResumoProjeto {
+  projetoId   Int     @id
+  recebemos   Decimal @db.Decimal(14, 2)
+  observacoes String?
+
+  Projeto Projeto @relation(fields: [projetoId], references: [id], onDelete: Cascade)
 }
 
 enum Role {
@@ -34,298 +237,22 @@ enum Role {
   USER
 }
 
-/* =========================
-   CADASTROS
-   ========================= */
-
-model UnidadeMedida {
-  id         Int      @id @default(autoincrement())
-  usuarioId  Int
-  usuario    Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-
-  sigla      String
-  nome       String
-
-  produtos   ProdutoServico[]
-  itens      EstimativaItem[] // UM sugerida/override por item
-
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  @@unique([usuarioId, sigla])
-  @@index([usuarioId])
+enum TipoItem {
+  PRODUTO
+  SERVICO
+  AMBOS
 }
 
-model ProdutoServico {
-  id              Int           @id @default(autoincrement())
-  usuarioId       Int
-  usuario         Usuario       @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-
-  nome            String
-  categoria       String?
-  unidadeMedidaId Int
-  unidade         UnidadeMedida @relation(fields: [unidadeMedidaId], references: [id])
-
-  fornecedores    FornecedorProduto[]
-  itens           EstimativaItem[]
-
-  // Relação inversa para ajustes financeiros por produto (nomeada)
-  financeirosAjustes FinanceiroAjuste[] @relation("AjustesPorProduto")
-
-  tipo        TipoItem @default(AMBOS)
-  refPrecoP1  Decimal? @db.Decimal(12, 2)
-  refPrecoP2  Decimal? @db.Decimal(12, 2)
-  refPrecoP3  Decimal? @db.Decimal(12, 2)
-
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  @@index([usuarioId, nome])
-  @@index([usuarioId])
+enum FontePrecoMO {
+  M1
+  M2
+  M3
+  MANUAL
 }
 
-model Fornecedor {
-  id         Int      @id @default(autoincrement())
-  usuarioId  Int
-  usuario    Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-
-  nome       String
-  cnpjCpf    String?
-  contato    String?
-
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  produtos   FornecedorProduto[]
-  itens      EstimativaItem[] @relation("FornecedorItens")
-
-  @@unique([usuarioId, cnpjCpf])
-  @@index([usuarioId, nome])
-  @@index([usuarioId])
-  @@unique([id, usuarioId], name: "Fornecedor_id_usuarioId_key")
-}
-
-model FornecedorProduto {
-  id           Int      @id @default(autoincrement())
-  usuarioId    Int
-  usuario      Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-
-  fornecedorId Int
-  produtoId    Int
-
-  fornecedor   Fornecedor     @relation(fields: [fornecedorId], references: [id], onDelete: Cascade)
-  produto      ProdutoServico @relation(fields: [produtoId], references: [id], onDelete: Cascade)
-
-  // 3 preços Materiais
-  precoMatP1   Decimal? @db.Decimal(12, 2)
-  precoMatP2   Decimal? @db.Decimal(12, 2)
-  precoMatP3   Decimal? @db.Decimal(12, 2)
-
-  // 3 preços Mão de Obra
-  precoMoM1    Decimal? @db.Decimal(12, 2)
-  precoMoM2    Decimal? @db.Decimal(12, 2)
-  precoMoM3    Decimal? @db.Decimal(12, 2)
-
-  dataUltAtual DateTime @default(now())
-  observacao   String?
-
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  @@unique([usuarioId, fornecedorId, produtoId])
-  @@index([usuarioId])
-  @@index([fornecedorId])
-  @@index([produtoId])
-}
-
-model ClienteUsuario {
-  id        Int     @id @default(autoincrement())
-  usuarioId Int
-  usuario   Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-
-  nome      String
-  cpf       String?
-  cnpj      String?
-  email     String?
-  telefone  String?
-  endereco  String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  projetos  Projeto[]
-
-  // Unicidade por usuário (permitindo nulls em Postgres)
-  @@unique([usuarioId, cpf])
-  @@unique([usuarioId, cnpj])
-  @@unique([usuarioId, email])
-
-  @@index([usuarioId, nome])
-  @@index([usuarioId])
-}
-
-/* =========================
-   PROJETOS & ESTIMATIVAS
-   ========================= */
-
-model Projeto {
-  id         Int      @id @default(autoincrement())
-  usuarioId  Int
-  usuario    Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-
-  nome       String
-  status     String   @default("rascunho") // rascunho | com_estimativa | aprovado | execucao | concluido
-
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  clienteId  Int?
-  cliente    ClienteUsuario? @relation(fields: [clienteId], references: [id], onDelete: SetNull)
-
-  estimativas Estimativa[]
-  resumo      ResumoProjeto?
-
-  // Relação inversa para ajustes do projeto (nomeada)
-  ajustesFinanceiros FinanceiroAjuste[] @relation("AjustesDoProjeto")
-
-  @@index([usuarioId, status])
-  @@index([clienteId])
-  @@index([usuarioId])
-}
-
-model Estimativa {
-  id         Int      @id @default(autoincrement())
-  usuarioId  Int
-  usuario    Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-
-  projetoId  Int
-  projeto    Projeto  @relation(fields: [projetoId], references: [id], onDelete: Cascade)
-
-  nome       String   @default("Estimativa")
-  criadaEm   DateTime @default(now())
-  aprovada   Boolean  @default(false)
-
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  itens      EstimativaItem[]
-
-  @@index([usuarioId, projetoId])
-  @@index([usuarioId])
-}
-
-model EstimativaItem {
-  id            Int      @id @default(autoincrement())
-  usuarioId     Int
-  usuario       Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-
-  estimativaId  Int
-  estimativa    Estimativa @relation(fields: [estimativaId], references: [id], onDelete: Cascade)
-
-  produtoId     Int
-  produto       ProdutoServico @relation(fields: [produtoId], references: [id])
-
-  quantidade    Decimal @db.Decimal(12, 3)
-
-  unidadeId     Int
-  unidade       UnidadeMedida @relation(fields: [unidadeId], references: [id])
-
-  fornecedorId  Int
-  fornecedor    Fornecedor @relation("FornecedorItens", fields: [fornecedorId], references: [id])
-
-  fontePrecoMat FontePrecoMaterial?
-  fontePrecoMo  FontePrecoMO?
-
-  valorUnitMat  Decimal? @db.Decimal(12, 2)
-  valorUnitMo   Decimal? @db.Decimal(12, 2)
-
-  totalItem     Decimal? @db.Decimal(12, 2)
-
-  // Relação inversa para ajustes por item (nomeada)
-  financeirosAjustes FinanceiroAjuste[] @relation("AjustesPorItem")
-
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  @@index([usuarioId, estimativaId])
-  @@index([produtoId])
-  @@index([unidadeId])
-  @@index([fornecedorId])
-  @@index([usuarioId])
-}
-
-/* =========================
-   FINANCEIRO (AJUSTES POR ITEM/PRODUTO/PROJETO)
-   ========================= */
-
-model FinanceiroAjuste {
-  id               Int      @id @default(autoincrement())
-  usuarioId        Int
-  usuario          Usuario  @relation("AjustesDoUsuario", fields: [usuarioId], references: [id], onDelete: Cascade)
-
-  projetoId        Int
-  projeto          Projeto  @relation("AjustesDoProjeto", fields: [projetoId], references: [id], onDelete: Cascade)
-
-  estimativaItemId Int?
-  estimativaItem   EstimativaItem? @relation("AjustesPorItem", fields: [estimativaItemId], references: [id], onDelete: SetNull)
-
-  produtoId        Int?
-  produto          ProdutoServico? @relation("AjustesPorProduto", fields: [produtoId], references: [id], onDelete: SetNull)
-
-  // +10.000 = +10%  |  -5.000 = -5%
-  percentual       Decimal? @db.Decimal(7, 3)
-
-  // Acréscimo/Desconto fixo em R$
-  valorFixo        Decimal? @db.Decimal(14, 2)
-
-  observacao       String?
-
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-
-  @@index([usuarioId])
-  @@index([projetoId])
-  @@index([estimativaItemId])
-  @@index([produtoId])
-}
-
-/* =========================
-   RESUMO FINANCEIRO (LEGADO)
-   ========================= */
-
-model ResumoProjeto {
-  projetoId   Int     @id
-  projeto     Projeto @relation(fields: [projetoId], references: [id], onDelete: Cascade)
-  recebemos   Decimal @db.Decimal(14, 2)
-  observacoes String?
-}
-
-/* =========================
-   USUÁRIOS
-   ========================= */
-
-model Usuario {
-  id             Int     @id @default(autoincrement())
-  supabaseUserId String  @unique
-  nome           String
-  cpf            String? @unique
-  email          String  @unique
-  telefone       String?
-  cnpj           String?
-  role           Role    @default(USER)
-
-  // relações "filhas"
-  unidades       UnidadeMedida[]
-  produtos       ProdutoServico[]
-  fornecedores   Fornecedor[]
-  vinculos       FornecedorProduto[]
-  projetos       Projeto[]
-  estimativas    Estimativa[]
-  itens          EstimativaItem[]
-  clientes       ClienteUsuario[]
-
-  // Relação inversa para ajustes criados pelo usuário (nomeada)
-  ajustesFinanceiros FinanceiroAjuste[] @relation("AjustesDoUsuario")
-
-  @@index([email])
+enum FontePrecoMaterial {
+  P1
+  P2
+  P3
+  MANUAL
 }

@@ -1,72 +1,53 @@
-'use client';
+"use client";
 
-import React from 'react';
+import * as React from "react";
 
-type Props = {
+type Props = React.InputHTMLAttributes<HTMLInputElement> & {
   name: string;
-  defaultValue?: string;
-  placeholder?: string;
-  className?: string;
-  style?: React.CSSProperties;
 };
 
-/**
- * Input de CPF/CNPJ com máscara visual e campo hidden com apenas dígitos.
- * - Visual padrão .input (igual aos demais campos)
- * - Envia somente números no form
- */
-export default function DocInput({
-  name,
-  defaultValue,
-  placeholder,
-  className = '',
-  style,
-}: Props) {
-  const onlyDigits = (s: string) => s.replace(/\D+/g, '');
+function onlyDigits(s: string) {
+  return s.replace(/\D+/g, "");
+}
 
-  const formatDoc = (digs: string) => {
-    if (digs.length <= 11) {
-      // CPF: 000.000.000-00
-      return digs
-        .replace(/^(\d{3})(\d)/, '$1.$2')
-        .replace(/^(\d{3})\.(\d{3})(\d)/, '$1.$2.$3')
-        .replace(/^(\d{3})\.(\d{3})\.(\d{3})(\d)/, '$1.$2.$3-$4')
-        .slice(0, 14);
-    }
-    // CNPJ: 00.000.000/0000-00
+function formatDoc(digs: string) {
+  if (digs.length <= 11) {
+    // CPF
     return digs
-      .replace(/^(\d{2})(\d)/, '$1.$2')
-      .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
-      .replace(/^(\d{2})\.(\d{3})\.(\d{3})(\d)/, '$1.$2.$3/$4')
-      .replace(/^(\d{2})\.(\d{3})\.(\d{3})\/(\d{4})(\d)/, '$1.$2.$3/$4-$5')
-      .slice(0, 18);
-  };
+      .replace(/^(\d{3})(\d)/, "$1.$2")
+      .replace(/^(\d{3})\.(\d{3})(\d)/, "$1.$2.$3")
+      .replace(/^(\d{3})\.(\d{3})\.(\d{3})(\d)/, "$1.$2.$3-$4")
+      .slice(0, 14);
+  }
+  // CNPJ
+  return digs
+    .replace(/^(\d{2})(\d)/, "$1.$2")
+    .replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3")
+    .replace(/^(\d{2})\.(\d{3})\.(\d{3})(\d)/, "$1.$2.$3/$4")
+    .replace(/^(\d{2})\.(\d{3})\.(\d{3})\/(\d{4})(\d)/, "$1.$2.$3/$4-$5")
+    .slice(0, 18);
+}
 
-  const [visible, setVisible] = React.useState(() => {
-    const digs = onlyDigits(defaultValue ?? '');
-    return formatDoc(digs);
-  });
+export default function DocInput({ defaultValue, onChange, ...props }: Props) {
+  const [value, setValue] = React.useState(() =>
+    formatDoc(onlyDigits(String(defaultValue ?? "")))
+  );
 
-  const [hidden, setHidden] = React.useState(() => onlyDigits(defaultValue ?? ''));
-
-  const onChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const raw = onlyDigits(e.target.value);
-    setVisible(formatDoc(raw));
-    setHidden(raw);
-  };
+  React.useEffect(() => {
+    setValue(formatDoc(onlyDigits(String(defaultValue ?? ""))));
+  }, [defaultValue]);
 
   return (
-    <>
-      <input
-        type="text"
-        inputMode="numeric"
-        placeholder={placeholder ?? 'CNPJ/CPF'}
-        value={visible}
-        onChange={onChange}
-        className={`input ${className}`}
-        style={style}
-      />
-      <input type="hidden" name={name} value={hidden} />
-    </>
+    <input
+      {...props}
+      inputMode="numeric"
+      value={value}
+      onChange={(e) => {
+        const raw = onlyDigits(e.target.value);
+        const masked = formatDoc(raw);
+        setValue(masked);
+        onChange?.(e);
+      }}
+    />
   );
 }
