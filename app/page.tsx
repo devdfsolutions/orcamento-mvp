@@ -1,3 +1,4 @@
+// app/page.tsx
 import type React from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -14,9 +15,16 @@ type UltimoProjetoRow = {
   id: number;
   nome: string;
   status: string;
-  totalAprov: number;
+  totalAprov: number; // (mantive o nome pra não mexer no componente)
   cliente?: { nome: string; responsavel: string | null } | null;
 };
+
+function sumItensTotal(
+  itens?: Array<{ totalItem: unknown }> | null | undefined
+): number {
+  if (!itens?.length) return 0;
+  return itens.reduce((acc, it) => acc + Number(it.totalItem ?? 0), 0);
+}
 
 export default async function Home() {
   // exige login
@@ -35,16 +43,23 @@ export default async function Home() {
   // ADM -> manda pro admin diretamente
   if (me.role === "ADM") redirect("/admin");
 
-  // projetos do usuário (com cliente + responsável)
+  // ✅ Projetos com cliente + ÚLTIMA estimativa (aprovada ou não) + itens
   const projetos = await prisma.projeto.findMany({
     where: { usuarioId: me.id },
     orderBy: { id: "desc" },
-    include: { cliente: { select: { nome: true, responsavel: true } } },
+    include: {
+      cliente: { select: { nome: true, responsavel: true } },
+      estimativas: {
+        where: { usuarioId: me.id },
+        orderBy: { id: "desc" },
+        take: 1,
+        include: { itens: { select: { totalItem: true } } },
+      },
+    },
   });
 
   const total = projetos.length;
 
-  // ✅ Ajuste aqui se você estiver usando "aguardando" (ou outros) como "em estimativa"
   const emEstimativa = projetos.filter(
     (p) => p.status === "rascunho" || p.status === "com_estimativa"
   ).length;
@@ -53,48 +68,31 @@ export default async function Home() {
   const execucao = projetos.filter((p) => p.status === "execucao").length;
   const concluidos = projetos.filter((p) => p.status === "concluido").length;
 
-  // estimativas aprovadas dos projetos ainda não concluídos (do meu usuário)
-  const aprovadas = await prisma.estimativa.findMany({
-    where: {
-      usuarioId: me.id,
-      aprovada: true,
-      projeto: {
-        NOT: { status: "concluido" },
-        usuarioId: me.id,
-      },
-    },
-    include: {
-      itens: { select: { totalItem: true } },
-      projeto: { include: { cliente: { select: { nome: true, responsavel: true } } } },
-    },
-    orderBy: { id: "desc" },
-  });
+  // ✅ Projeção: soma projetos "aprovado" + "execucao" e NÃO concluído
+  // (se você quiser só "aprovado", troque o Set abaixo por new Set(["aprovado"]))
+  const statusContaNaProjecao = new Set(["aprovado", "execucao"]);
 
-  const gastoProjetado = aprovadas.reduce((acc, e) => {
-    const soma = e.itens.reduce((x, i) => x + Number(i.totalItem ?? 0), 0);
-    return acc + soma;
+  const gastoProjetado = projetos.reduce((acc, p) => {
+    if (p.status === "concluido") return acc;
+    if (!statusContaNaProjecao.has(String(p.status))) return acc;
+
+    const est = p.estimativas?.[0];
+    return acc + sumItensTotal(est?.itens);
   }, 0);
 
-  // últimos 6 com total aprovado
-  const ultimos: UltimoProjetoRow[] = await Promise.all(
-    projetos.slice(0, 6).map(async (p) => {
-      const estAprov = await prisma.estimativa.findFirst({
-        where: { projetoId: p.id, usuarioId: me.id, aprovada: true },
-        include: { itens: { select: { totalItem: true } } },
-      });
+  // ✅ últimos 6 com total da ÚLTIMA estimativa (aprovada ou não)
+  const ultimos: UltimoProjetoRow[] = projetos.slice(0, 6).map((p) => {
+    const est = p.estimativas?.[0];
+    const totalUltima = sumItensTotal(est?.itens);
 
-      const totalAprov =
-        estAprov?.itens.reduce((a, i) => a + Number(i.totalItem ?? 0), 0) ?? 0;
-
-      return {
-        id: p.id,
-        nome: p.nome,
-        status: p.status,
-        totalAprov,
-        cliente: p.cliente ?? null, // ✅ agora tem {nome, responsavel}
-      };
-    })
-  );
+    return {
+      id: p.id,
+      nome: p.nome,
+      status: p.status,
+      totalAprov: totalUltima, // mantém compatível com UltimosProjetosTabela
+      cliente: p.cliente ?? null,
+    };
+  });
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
@@ -137,6 +135,7 @@ export default async function Home() {
           </Link>
         </div>
 
+        {/* tabela isolada no client */}
         <UltimosProjetosTabela projetos={ultimos} />
       </section>
     </div>

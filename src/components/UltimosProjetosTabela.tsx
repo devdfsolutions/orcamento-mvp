@@ -33,11 +33,7 @@ const linkBtn: React.CSSProperties = {
   color: "#111",
 };
 
-export default function UltimosProjetosTabela({
-  projetos,
-}: {
-  projetos: Projeto[];
-}) {
+export default function UltimosProjetosTabela({ projetos }: { projetos: Projeto[] }) {
   return (
     <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 8 }}>
       <thead>
@@ -47,7 +43,7 @@ export default function UltimosProjetosTabela({
           <th style={th}>Cliente</th>
           <th style={th}>Responsável</th>
           <th style={th}>Status</th>
-          <th style={{ ...th, textAlign: "right" }}>Total aprovado</th>
+          <th style={{ ...th, textAlign: "right" }}>Total</th>
           <th style={th}></th>
         </tr>
       </thead>
@@ -60,8 +56,8 @@ export default function UltimosProjetosTabela({
             <td style={td}>{p.cliente?.nome ?? "—"}</td>
             <td style={td}>{p.cliente?.responsavel ?? "—"}</td>
             <td style={td}>{statusLabel(p.status)}</td>
-            <td style={{ ...td, textAlign: "right" }}>
-              {p.totalAprov
+            <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>
+              {p.totalAprov > 0
                 ? p.totalAprov.toLocaleString("pt-BR", {
                     style: "currency",
                     currency: "BRL",
@@ -100,6 +96,10 @@ function statusLabel(s: string) {
       return "Execução";
     case "concluido":
       return "Concluído";
+    case "desaprovado":
+      return "Desaprovado";
+    case "aguardando":
+      return "Aguardando";
     default:
       return s;
   }
