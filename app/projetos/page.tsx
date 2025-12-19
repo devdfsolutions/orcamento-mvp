@@ -1,3 +1,4 @@
+// app/projetos/page.tsx
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
@@ -39,6 +40,11 @@ export default async function Page({ searchParams }: PageProps) {
         OR: [
           { nome: { contains: q, mode: "insensitive" as const } },
           { cliente: { nome: { contains: q, mode: "insensitive" as const } } },
+          {
+            cliente: {
+              responsavel: { contains: q, mode: "insensitive" as const },
+            },
+          },
         ],
       }
     : { usuarioId: me.id };
@@ -49,18 +55,18 @@ export default async function Page({ searchParams }: PageProps) {
       orderBy: { nome: "asc" },
       select: { id: true, nome: true },
     }),
+
+    // ✅ Pega SEM filtrar aprovada
     prisma.projeto.findMany({
       where: whereProjetos,
       orderBy: { id: "desc" },
       include: {
-        cliente: { select: { id: true, nome: true } },
+        cliente: { select: { id: true, nome: true, responsavel: true } },
         estimativas: {
-          where: { usuarioId: me.id, aprovada: true },
+          where: { usuarioId: me.id },
           orderBy: { id: "desc" },
-          take: 1,
-          include: {
-            itens: { select: { totalItem: true } },
-          },
+          take: 1, // última estimativa do projeto
+          include: { itens: { select: { totalItem: true } } },
         },
       },
     }),
@@ -68,15 +74,18 @@ export default async function Page({ searchParams }: PageProps) {
 
   const projetosComValor = projetos.map((p) => {
     const est = p.estimativas?.[0];
-    const totalAprovado =
-      est?.itens?.reduce((acc, it) => acc + Number(it.totalItem ?? 0), 0) ?? null;
+    const totalUltimaEstimativa =
+      est?.itens?.reduce((acc, it) => acc + Number(it.totalItem ?? 0), 0) ?? 0;
 
+    // ✅ regra de exibição:
+    // mostra valor só quando projeto estiver aprovado
     return {
       id: p.id,
       nome: p.nome,
       status: p.status,
       clienteNome: p.cliente?.nome ?? null,
-      totalAprovado,
+      responsavel: p.cliente?.responsavel ?? null,
+      totalAprovado: totalUltimaEstimativa > 0 ? totalUltimaEstimativa : null,
     };
   });
 
@@ -89,7 +98,6 @@ export default async function Page({ searchParams }: PageProps) {
         </Link>
       </header>
 
-      {/* alertas */}
       {!!sp?.ok && (
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-800">
           ✅ Ação realizada com sucesso.
@@ -101,14 +109,17 @@ export default async function Page({ searchParams }: PageProps) {
         </div>
       )}
 
-      {/* NOVO PROJETO (1 linha) + PESQUISA */}
       <section className="card">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="card-head">
             <h2>Novo projeto</h2>
           </div>
 
-          <form action="/projetos" method="get" className="flex items-center gap-2">
+          <form
+            action="/projetos"
+            method="get"
+            className="flex items-center gap-2"
+          >
             <input
               name="q"
               defaultValue={q}
@@ -127,7 +138,10 @@ export default async function Page({ searchParams }: PageProps) {
           </form>
         </div>
 
-        <form action={criarProjetoAndGo} className="mt-3 flex items-center gap-2 flex-wrap">
+        <form
+          action={criarProjetoAndGo}
+          className="mt-3 flex items-center gap-2 flex-wrap"
+        >
           <input
             name="nome"
             placeholder="Nome do projeto"
@@ -136,7 +150,12 @@ export default async function Page({ searchParams }: PageProps) {
             style={{ width: 260 }}
           />
 
-          <select name="clienteId" className="input" defaultValue="" style={{ width: 260 }}>
+          <select
+            name="clienteId"
+            className="input"
+            defaultValue=""
+            style={{ width: 260 }}
+          >
             <option value="">Cliente (opcional)</option>
             {clientes.map((c) => (
               <option key={c.id} value={c.id}>
@@ -151,18 +170,18 @@ export default async function Page({ searchParams }: PageProps) {
         </form>
       </section>
 
-      {/* tabela */}
       <section className="card p-0 overflow-hidden">
         <div className="table-wrap">
           <table className="table w-full">
             <colgroup>
               {[
-                { w: "64px" }, // ID
-                { w: "34%" }, // Projeto
-                { w: "24%" }, // Cliente
-                { w: "140px" }, // Valor
-                { w: "140px" }, // Status
-                { w: "180px" }, // Ações
+                { w: "64px" },
+                { w: "30%" },
+                { w: "22%" },
+                { w: "20%" },
+                { w: "140px" },
+                { w: "140px" },
+                { w: "180px" },
               ].map((c, i) => (
                 <col key={i} style={c.w ? { width: c.w } : undefined} />
               ))}
@@ -170,7 +189,15 @@ export default async function Page({ searchParams }: PageProps) {
 
             <thead>
               <tr>
-                {["ID", "Projeto", "Cliente", "Valor", "Status", "Ações"].map((h) => (
+                {[
+                  "ID",
+                  "Projeto",
+                  "Cliente",
+                  "Responsável",
+                  "Valor",
+                  "Status",
+                  "Ações",
+                ].map((h) => (
                   <th key={h}>{h}</th>
                 ))}
               </tr>
@@ -182,6 +209,7 @@ export default async function Page({ searchParams }: PageProps) {
                   <td>{p.id}</td>
                   <td className="font-medium text-zinc-900">{p.nome}</td>
                   <td>{p.clienteNome ?? "—"}</td>
+                  <td>{p.responsavel ?? "—"}</td>
                   <td className="whitespace-nowrap">
                     {p.totalAprovado != null && p.totalAprovado > 0
                       ? money(p.totalAprovado)
@@ -189,13 +217,22 @@ export default async function Page({ searchParams }: PageProps) {
                   </td>
                   <td>{p.status}</td>
                   <td className="text-right whitespace-nowrap">
-                    <Link href={`/projetos/${p.id}/itens`} className="btn btn-sm mr-2">
+                    <Link
+                      href={`/projetos/${p.id}/itens`}
+                      className="btn btn-sm mr-2"
+                    >
                       Abrir
                     </Link>
 
-                    <form action={excluirProjeto} className="inline align-middle">
+                    <form
+                      action={excluirProjeto}
+                      className="inline align-middle"
+                    >
                       <input type="hidden" name="id" value={p.id} />
-                      <ConfirmSubmit className="btn btn-danger btn-sm" message="Excluir este projeto?">
+                      <ConfirmSubmit
+                        className="btn btn-danger btn-sm"
+                        message="Excluir este projeto?"
+                      >
                         Excluir
                       </ConfirmSubmit>
                     </form>
@@ -205,7 +242,7 @@ export default async function Page({ searchParams }: PageProps) {
 
               {projetosComValor.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="text-center text-zinc-500 py-8">
+                  <td colSpan={7} className="text-center text-zinc-500 py-8">
                     Nenhum projeto encontrado.
                   </td>
                 </tr>

@@ -8,7 +8,7 @@ type Projeto = {
   nome: string;
   status: string;
   totalAprov: number;
-  cliente?: { nome: string } | null;
+  cliente?: { nome: string; responsavel?: string | null } | null;
 };
 
 const th: React.CSSProperties = {
@@ -33,7 +33,11 @@ const linkBtn: React.CSSProperties = {
   color: "#111",
 };
 
-export default function UltimosProjetosTabela({ projetos }: { projetos: Projeto[] }) {
+export default function UltimosProjetosTabela({
+  projetos,
+}: {
+  projetos: Projeto[];
+}) {
   return (
     <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 8 }}>
       <thead>
@@ -41,6 +45,7 @@ export default function UltimosProjetosTabela({ projetos }: { projetos: Projeto[
           <th style={th}>ID</th>
           <th style={th}>Projeto</th>
           <th style={th}>Cliente</th>
+          <th style={th}>Responsável</th>
           <th style={th}>Status</th>
           <th style={{ ...th, textAlign: "right" }}>Total aprovado</th>
           <th style={th}></th>
@@ -53,6 +58,7 @@ export default function UltimosProjetosTabela({ projetos }: { projetos: Projeto[
             <td style={td}>{p.id}</td>
             <td style={td}>{p.nome}</td>
             <td style={td}>{p.cliente?.nome ?? "—"}</td>
+            <td style={td}>{p.cliente?.responsavel ?? "—"}</td>
             <td style={td}>{statusLabel(p.status)}</td>
             <td style={{ ...td, textAlign: "right" }}>
               {p.totalAprov
@@ -72,7 +78,7 @@ export default function UltimosProjetosTabela({ projetos }: { projetos: Projeto[
 
         {projetos.length === 0 && (
           <tr>
-            <td style={td} colSpan={6}>
+            <td style={td} colSpan={7}>
               Nenhum projeto ainda.
             </td>
           </tr>

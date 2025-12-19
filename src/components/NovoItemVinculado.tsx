@@ -103,7 +103,6 @@ export default function NovoItemVinculado(props: {
     const id = produtoByNome.get(name) ?? null;
     setProdutoId(id);
 
-    // mantém fornecedor se ainda for compatível
     if (id && fornecedorId && !allowedFornecedorIds.has(fornecedorId)) {
       setFornecedorId(null);
       setFornecedorText("");
@@ -115,7 +114,6 @@ export default function NovoItemVinculado(props: {
     const id = fornecedorByNome.get(name) ?? null;
     setFornecedorId(id);
 
-    // mantém produto se ainda for compatível
     if (id && produtoId && !allowedProdutoIds.has(produtoId)) {
       setProdutoId(null);
       setProdutoText("");
@@ -129,128 +127,169 @@ export default function NovoItemVinculado(props: {
     Number(quantidade) > 0;
 
   return (
-    <form action={adicionarItem} className="grid grid-cols-1 md:grid-cols-12 gap-3">
-      <input type="hidden" name="estimativaId" value={estimativaId} />
-      <input type="hidden" name="produtoId" value={produtoId ?? ""} />
-      <input type="hidden" name="fornecedorId" value={fornecedorId ?? ""} />
-      {/* unidade vem do produto (auto) */}
-      <input type="hidden" name="unidadeId" value={produtoSel?.unidadeMedidaId ?? ""} />
-
-      {/* LINHA 1 (4 campos) */}
-      <div className="md:col-span-5">
+    <>
+      <form action={adicionarItem} className="novo-grid">
+        <input type="hidden" name="estimativaId" value={estimativaId} />
+        <input type="hidden" name="produtoId" value={produtoId ?? ""} />
+        <input type="hidden" name="fornecedorId" value={fornecedorId ?? ""} />
         <input
-          className="input w-full"
-          placeholder="Produto/Serviço (digite)"
-          list="produtos-list"
-          value={produtoText}
-          onChange={(e) => {
-            const v = e.target.value;
-            setProdutoText(v);
-            const id = produtoByNome.get(v) ?? null;
-            setProdutoId(id);
-          }}
-          onBlur={() => onPickProduto(produtoText)}
+          type="hidden"
+          name="unidadeId"
+          value={produtoSel?.unidadeMedidaId ?? ""}
         />
-        <datalist id="produtos-list">
-          {filteredProdutos.map((p) => (
-            <option key={p.id} value={p.nome ?? ""} />
-          ))}
-        </datalist>
-      </div>
 
-      <div className="md:col-span-4">
-        <input
-          className="input w-full"
-          placeholder="Fornecedor (digite)"
-          list="fornecedores-list"
-          value={fornecedorText}
-          onChange={(e) => {
-            const v = e.target.value;
-            setFornecedorText(v);
-            const id = fornecedorByNome.get(v) ?? null;
-            setFornecedorId(id);
-          }}
-          onBlur={() => onPickFornecedor(fornecedorText)}
-        />
-        <datalist id="fornecedores-list">
-          {filteredFornecedores.map((f) => (
-            <option key={f.id} value={f.nome ?? ""} />
-          ))}
-        </datalist>
-      </div>
+        {/* Produto */}
+        <div className="span-5">
+          <input
+            className="input w-full"
+            placeholder="Produto/Serviço (digite)"
+            list="produtos-list"
+            value={produtoText}
+            onChange={(e) => {
+              const v = e.target.value;
+              setProdutoText(v);
+              const id = produtoByNome.get(v) ?? null;
+              setProdutoId(id);
+            }}
+            onBlur={() => onPickProduto(produtoText)}
+          />
+          <datalist id="produtos-list">
+            {filteredProdutos.map((p) => (
+              <option key={p.id} value={p.nome ?? ""} />
+            ))}
+          </datalist>
+        </div>
 
-      <div className="md:col-span-2">
-        <input
-          className="input w-full"
-          value={unidadeSel?.sigla ?? "Unidade (auto)"}
-          readOnly
-        />
-      </div>
+        {/* Fornecedor */}
+        <div className="span-4">
+          <input
+            className="input w-full"
+            placeholder="Fornecedor (digite)"
+            list="fornecedores-list"
+            value={fornecedorText}
+            onChange={(e) => {
+              const v = e.target.value;
+              setFornecedorText(v);
+              const id = fornecedorByNome.get(v) ?? null;
+              setFornecedorId(id);
+            }}
+            onBlur={() => onPickFornecedor(fornecedorText)}
+          />
+          <datalist id="fornecedores-list">
+            {filteredFornecedores.map((f) => (
+              <option key={f.id} value={f.nome ?? ""} />
+            ))}
+          </datalist>
+        </div>
 
-      <div className="md:col-span-1">
-        <input
-          name="quantidade"
-          className="input w-full"
-          placeholder="Qtd"
-          inputMode="decimal"
-          value={quantidade}
-          onChange={(e) => setQuantidade(e.target.value)}
-          required
-        />
-      </div>
+        {/* Unidade (auto) */}
+        <div className="span-2">
+          <input
+            className="input w-full"
+            value={unidadeSel?.sigla ?? "Unidade (auto)"}
+            readOnly
+          />
+        </div>
 
-      {/* LINHA 2 (3 campos) */}
-      <div className="md:col-span-6">
-        <input
-          name="ajuste"
-          className="input w-full"
-          placeholder="Ajuste (ex: 10% ou 100)"
-          value={ajuste}
-          onChange={(e) => setAjuste(e.target.value)}
-        />
-      </div>
+        {/* Qtd */}
+        <div className="span-1">
+          <input
+            name="quantidade"
+            className="input w-full"
+            placeholder="Qtd"
+            inputMode="decimal"
+            value={quantidade}
+            onChange={(e) => setQuantidade(e.target.value)}
+            required
+          />
+        </div>
 
-      <div className="md:col-span-3">
-        <select
-          name="fontePrecoMat"
-          className="input w-full"
-          value={fonteMat}
-          onChange={(e) => setFonteMat(e.target.value as FonteMatValue)}
-        >
-          {fontesMat.map((x) => (
-            <option key={x.v} value={x.v}>
-              {x.l}
-            </option>
-          ))}
-        </select>
-      </div>
+        {/* Ajuste */}
+        <div className="span-6">
+          <input
+            name="ajuste"
+            className="input w-full"
+            placeholder="Ajuste (ex: 10% ou 100)"
+            value={ajuste}
+            onChange={(e) => setAjuste(e.target.value)}
+          />
+        </div>
 
-      <div className="md:col-span-3">
-        <select
-          name="fontePrecoMo"
-          className="input w-full"
-          value={fonteMo}
-          onChange={(e) => setFonteMo(e.target.value as FonteMoValue)}
-        >
-          {fontesMo.map((x) => (
-            <option key={x.v} value={x.v}>
-              {x.l}
-            </option>
-          ))}
-        </select>
-      </div>
+        {/* Fonte Mat */}
+        <div className="span-3">
+          <select
+            name="fontePrecoMat"
+            className="input w-full"
+            value={fonteMat}
+            onChange={(e) => setFonteMat(e.target.value as FonteMatValue)}
+          >
+            {fontesMat.map((x) => (
+              <option key={x.v} value={x.v}>
+                {x.l}
+              </option>
+            ))}
+          </select>
+        </div>
 
-      {/* botão */}
-      <div className="md:col-span-12 flex justify-start">
-        <button
-          className="btn btn-primary"
-          type="submit"
-          disabled={!canSubmit}
-          title={!canSubmit ? "Selecione Produto, Fornecedor e Qtd > 0" : ""}
-        >
-          Adicionar item
-        </button>
-      </div>
-    </form>
+        {/* Fonte Mo */}
+        <div className="span-3">
+          <select
+            name="fontePrecoMo"
+            className="input w-full"
+            value={fonteMo}
+            onChange={(e) => setFonteMo(e.target.value as FonteMoValue)}
+          >
+            {fontesMo.map((x) => (
+              <option key={x.v} value={x.v}>
+                {x.l}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Botão */}
+        <div className="span-12">
+          <button
+            className="btn btn-primary"
+            type="submit"
+            disabled={!canSubmit}
+            title={!canSubmit ? "Selecione Produto, Fornecedor e Qtd > 0" : ""}
+          >
+            Adicionar item
+          </button>
+        </div>
+      </form>
+
+      <style jsx>{`
+        .novo-grid {
+          display: grid;
+          grid-template-columns: repeat(12, minmax(0, 1fr));
+          gap: 10px;
+          align-items: end;
+        }
+        .span-12 { grid-column: span 12 / span 12; }
+        .span-6 { grid-column: span 6 / span 6; }
+        .span-5 { grid-column: span 5 / span 5; }
+        .span-4 { grid-column: span 4 / span 4; }
+        .span-3 { grid-column: span 3 / span 3; }
+        .span-2 { grid-column: span 2 / span 2; }
+        .span-1 { grid-column: span 1 / span 1; }
+
+        @media (max-width: 900px) {
+          .novo-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+          .span-12,
+          .span-6,
+          .span-5,
+          .span-4,
+          .span-3,
+          .span-2,
+          .span-1 {
+            grid-column: span 2 / span 2;
+          }
+        }
+      `}</style>
+    </>
   );
 }

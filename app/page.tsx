@@ -15,7 +15,7 @@ type UltimoProjetoRow = {
   nome: string;
   status: string;
   totalAprov: number;
-  cliente?: { nome: string } | null;
+  cliente?: { nome: string; responsavel: string | null } | null;
 };
 
 export default async function Home() {
@@ -35,17 +35,20 @@ export default async function Home() {
   // ADM -> manda pro admin diretamente
   if (me.role === "ADM") redirect("/admin");
 
-  // projetos do usuário (com cliente)
+  // projetos do usuário (com cliente + responsável)
   const projetos = await prisma.projeto.findMany({
     where: { usuarioId: me.id },
     orderBy: { id: "desc" },
-    include: { cliente: { select: { nome: true } } },
+    include: { cliente: { select: { nome: true, responsavel: true } } },
   });
 
   const total = projetos.length;
+
+  // ✅ Ajuste aqui se você estiver usando "aguardando" (ou outros) como "em estimativa"
   const emEstimativa = projetos.filter(
     (p) => p.status === "rascunho" || p.status === "com_estimativa"
   ).length;
+
   const aprovadosCount = projetos.filter((p) => p.status === "aprovado").length;
   const execucao = projetos.filter((p) => p.status === "execucao").length;
   const concluidos = projetos.filter((p) => p.status === "concluido").length;
@@ -62,7 +65,7 @@ export default async function Home() {
     },
     include: {
       itens: { select: { totalItem: true } },
-      projeto: { include: { cliente: { select: { nome: true } } } },
+      projeto: { include: { cliente: { select: { nome: true, responsavel: true } } } },
     },
     orderBy: { id: "desc" },
   });
@@ -88,7 +91,7 @@ export default async function Home() {
         nome: p.nome,
         status: p.status,
         totalAprov,
-        cliente: p.cliente ?? null,
+        cliente: p.cliente ?? null, // ✅ agora tem {nome, responsavel}
       };
     })
   );
@@ -134,7 +137,6 @@ export default async function Home() {
           </Link>
         </div>
 
-        {/* ✅ tabela isolada no client para evitar hydration warning */}
         <UltimosProjetosTabela projetos={ultimos} />
       </section>
     </div>

@@ -12,7 +12,13 @@ import AutoCloseForm from "@/components/AutoCloseForm";
 import ToggleRowEditing from "@/components/ToggleRowEditing";
 import NovoItemVinculado from "@/components/NovoItemVinculado";
 
-import { ensureEstimativa, atualizarItem, excluirItem } from "@/actions/estimativas";
+import {
+  ensureEstimativa,
+  atualizarItem,
+  excluirItem,
+} from "@/actions/estimativas";
+
+import { atualizarStatusProjeto } from "@/actions/projetos";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -48,7 +54,8 @@ type ItemRow = {
 
 type VinculoRow = { produtoId: number; fornecedorId: number };
 
-const money = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+const money = (v: number) =>
+  v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
 function fmtAjuste(tipo: string | null, valor: unknown) {
   const n = Number(valor ?? 0);
@@ -73,6 +80,20 @@ const fontesMo = [
   { v: "MANUAL", l: "MANUAL" },
 ] as const;
 
+function statusBadgeStyle(status?: string | null) {
+  const s = String(status ?? "—").toLowerCase();
+  if (s === "aprovado") {
+    return { background: "#ecfdf5", borderColor: "#a7f3d0" };
+  }
+  if (s === "desaprovado") {
+    return { background: "#fff1f2", borderColor: "#fecdd3" };
+  }
+  if (s === "aguardando") {
+    return { background: "#fffbeb", borderColor: "#fde68a" };
+  }
+  return { background: "var(--muted)", borderColor: "var(--border)" };
+}
+
 export default async function Page({ params, searchParams }: PageProps) {
   const { id } = await params;
   const sp = (await searchParams) ?? undefined;
@@ -96,7 +117,9 @@ export default async function Page({ params, searchParams }: PageProps) {
 
   const projeto = await prisma.projeto.findFirst({
     where: { id: projetoId, usuarioId: me.id },
-    include: { cliente: { select: { id: true, nome: true } } },
+    include: {
+      cliente: { select: { id: true, nome: true, responsavel: true } },
+    },
   });
   if (!projeto) redirect("/projetos?e=Projeto não encontrado");
 
@@ -124,9 +147,15 @@ export default async function Page({ params, searchParams }: PageProps) {
     }),
   ])) as [ProdutoRow[], FornecedorRow[], UnidadeRow[], VinculoRow[]];
 
-  const produtoMap = new Map<number, string>(produtos.map((p) => [p.id, p.nome ?? "—"]));
-  const fornecedorMap = new Map<number, string>(fornecedores.map((f) => [f.id, f.nome ?? "—"]));
-  const unidadeMap = new Map<number, string>(unidades.map((u) => [u.id, u.sigla ?? "—"]));
+  const produtoMap = new Map<number, string>(
+    produtos.map((p) => [p.id, p.nome ?? "—"])
+  );
+  const fornecedorMap = new Map<number, string>(
+    fornecedores.map((f) => [f.id, f.nome ?? "—"])
+  );
+  const unidadeMap = new Map<number, string>(
+    unidades.map((u) => [u.id, u.sigla ?? "—"])
+  );
 
   const itens = (await prisma.estimativaItem.findMany({
     where: { usuarioId: me.id, estimativaId },
@@ -159,50 +188,103 @@ export default async function Page({ params, searchParams }: PageProps) {
     return acc + qtd * (mat + mo);
   }, 0);
 
-  // ✅ Total COM ajuste: usa totalItem (já calculado pela action)
-  const totalComAjuste = itens.reduce((acc, it) => acc + Number(it.totalItem ?? 0), 0);
+  // ✅ Total COM ajuste: usa totalItem
+  const totalComAjuste = itens.reduce(
+    (acc, it) => acc + Number(it.totalItem ?? 0),
+    0
+  );
 
   return (
-    <main className="max-w-[1180px] mr-auto ml-6 p-6 grid gap-5">
-      <header className="flex items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-zinc-900">
+    <main className="page">
+      <header className="header">
+        <div className="head-left">
+          <h1 className="title">
             Projeto #{projeto.id} — {projeto.nome}
           </h1>
-          <p className="text-sm text-zinc-500 mt-1">
-            Cliente: <span className="text-zinc-800">{projeto.cliente?.nome ?? "—"}</span>
+          <p className="subtitle">
+            Cliente:{" "}
+            <span className="subtitle-strong">
+              {projeto.cliente?.nome ?? "—"}
+            </span>
+            {" • "}
+            Responsável:{" "}
+            <span className="subtitle-strong">
+              {projeto.cliente?.responsavel ?? "—"}
+            </span>
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* ✅ AÇÕES DO TOPO (em linha, bonitinho) */}
+        <div className="actions-top">
           <Link className="btn btn-sm" href="/projetos">
             Projetos
           </Link>
-          <Link className="btn btn-sm" href={`/projetos/${projeto.id}/estimativas`}>
-            Estimativas
-          </Link>
+
+          <span
+            className="pill status-pill"
+            title="Status do projeto"
+            style={statusBadgeStyle(projeto.status)}
+          >
+            {String(projeto.status ?? "—").toUpperCase()}
+          </span>
+
+          <form action={atualizarStatusProjeto} className="inline">
+            <input type="hidden" name="projetoId" value={projeto.id} />
+            <input type="hidden" name="status" value="aprovado" />
+            <button className="btn btn-sm" type="submit">
+              Aprovar
+            </button>
+          </form>
+
+          <form action={atualizarStatusProjeto} className="inline">
+            <input type="hidden" name="projetoId" value={projeto.id} />
+            <input type="hidden" name="status" value="desaprovado" />
+            <button className="btn btn-sm" type="submit">
+              Desaprovar
+            </button>
+          </form>
+
+          <form action={atualizarStatusProjeto} className="inline">
+            <input type="hidden" name="projetoId" value={projeto.id} />
+            <input type="hidden" name="status" value="aguardando" />
+            <button className="btn btn-sm" type="submit">
+              Aguardando
+            </button>
+          </form>
+
+          <a
+            className="btn btn-sm"
+            href={`/projetos/${projeto.id}/export-excel`}
+          >
+            Gerar Excel
+          </a>
         </div>
       </header>
 
       {!!sp?.e && (
-        <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-rose-800">❌ {sp.e}</div>
+        <div className="alert alert-error">
+          ❌ {sp.e}
+        </div>
       )}
       {!!sp?.ok && (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-800">✅ OK</div>
+        <div className="alert alert-ok">
+          ✅ OK
+        </div>
       )}
 
       <section className="card">
-        <div className="flex items-center justify-between gap-2">
+        <div className="totais">
           <div>
-            <div className="text-sm text-zinc-500">Total (Valor de Venda)</div>
-            <div className="text-2xl font-semibold">{money(totalComAjuste)}</div>
+            <div className="muted">Total (Valor de Venda)</div>
+            <div className="big">{money(totalComAjuste)}</div>
 
-            <div className="mt-2 text-sm text-zinc-500">Total real (Valor de Custo)</div>
-            <div className="text-lg font-semibold text-zinc-900">{money(totalSemAjuste)}</div>
+            <div className="muted mt8">Total real (Valor de Custo)</div>
+            <div className="mid">{money(totalSemAjuste)}</div>
           </div>
 
-          <div className="text-sm text-zinc-500">
-            Estimativa ID: <span className="text-zinc-800 font-medium">{estimativaId}</span>
+          <div className="muted">
+            Estimativa ID:{" "}
+            <span className="strong">{estimativaId}</span>
           </div>
         </div>
       </section>
@@ -247,7 +329,18 @@ export default async function Page({ params, searchParams }: PageProps) {
 
             <thead>
               <tr>
-                {["ID", "Produto", "Fornecedor", "Un", "Qtd", "Mat", "MO", "Ajuste", "Total", "Ações"].map((h) => (
+                {[
+                  "ID",
+                  "Produto",
+                  "Fornecedor",
+                  "Un",
+                  "Qtd",
+                  "Mat",
+                  "MO",
+                  "Ajuste",
+                  "Total",
+                  "Ações",
+                ].map((h) => (
                   <th key={h}>{h}</th>
                 ))}
               </tr>
@@ -261,8 +354,13 @@ export default async function Page({ params, searchParams }: PageProps) {
 
                 const produtoNome = produtoMap.get(it.produtoId) ?? "—";
                 const fornecedorNome =
-                  it.fornecedorId != null ? fornecedorMap.get(it.fornecedorId) ?? "—" : "—";
-                const unidadeSigla = it.unidadeId != null ? unidadeMap.get(it.unidadeId) ?? "—" : "—";
+                  it.fornecedorId != null
+                    ? fornecedorMap.get(it.fornecedorId) ?? "—"
+                    : "—";
+                const unidadeSigla =
+                  it.unidadeId != null
+                    ? unidadeMap.get(it.unidadeId) ?? "—"
+                    : "—";
 
                 const ajusteView = fmtAjuste(it.ajusteTipo, it.ajusteValor);
 
@@ -280,7 +378,9 @@ export default async function Page({ params, searchParams }: PageProps) {
                     </td>
 
                     <td>
-                      <span className="cell-view font-medium text-zinc-900">{produtoNome}</span>
+                      <span className="cell-view font-medium text-zinc-900">
+                        {produtoNome}
+                      </span>
                       <select
                         form={formId}
                         name="produtoId"
@@ -318,11 +418,15 @@ export default async function Page({ params, searchParams }: PageProps) {
 
                     <td>
                       <span className="cell-view">{unidadeSigla}</span>
-                      <span className="cell-edit text-sm text-zinc-500">Auto</span>
+                      <span className="cell-edit text-sm text-zinc-500">
+                        Auto
+                      </span>
                     </td>
 
                     <td>
-                      <span className="cell-view">{Number(it.quantidade ?? 0)}</span>
+                      <span className="cell-view">
+                        {Number(it.quantidade ?? 0)}
+                      </span>
                       <input
                         form={formId}
                         name="quantidade"
@@ -334,7 +438,9 @@ export default async function Page({ params, searchParams }: PageProps) {
                     </td>
 
                     <td className="whitespace-nowrap">
-                      <span className="cell-view">{money(Number(it.valorUnitMat ?? 0))}</span>
+                      <span className="cell-view">
+                        {money(Number(it.valorUnitMat ?? 0))}
+                      </span>
                       <select
                         form={formId}
                         name="fontePrecoMat"
@@ -350,7 +456,9 @@ export default async function Page({ params, searchParams }: PageProps) {
                     </td>
 
                     <td className="whitespace-nowrap">
-                      <span className="cell-view">{money(Number(it.valorUnitMo ?? 0))}</span>
+                      <span className="cell-view">
+                        {money(Number(it.valorUnitMo ?? 0))}
+                      </span>
                       <select
                         form={formId}
                         name="fontePrecoMo"
@@ -377,22 +485,41 @@ export default async function Page({ params, searchParams }: PageProps) {
                     </td>
 
                     <td className="whitespace-nowrap">
-                      <span className="cell-view font-medium">{money(Number(it.totalItem ?? 0))}</span>
+                      <span className="cell-view font-medium">
+                        {money(Number(it.totalItem ?? 0))}
+                      </span>
                     </td>
 
                     <td className="text-right whitespace-nowrap">
-                      <details id={detailsId} className="inline-block mr-2 align-middle">
+                      <details
+                        id={detailsId}
+                        className="inline-block mr-2 align-middle"
+                      >
                         <summary className="pill">Editar</summary>
                       </details>
 
-                      <button type="submit" form={formId} className="btn btn-primary btn-sm save-btn align-middle">
+                      <button
+                        type="submit"
+                        form={formId}
+                        className="btn btn-primary btn-sm save-btn align-middle"
+                      >
                         Salvar
                       </button>
 
-                      <form action={excluirItem} className="inline ml-2 align-middle">
-                        <input type="hidden" name="estimativaId" value={estimativaId} />
+                      <form
+                        action={excluirItem}
+                        className="inline ml-2 align-middle"
+                      >
+                        <input
+                          type="hidden"
+                          name="estimativaId"
+                          value={estimativaId}
+                        />
                         <input type="hidden" name="id" value={it.id} />
-                        <ConfirmSubmit className="btn btn-danger btn-sm" message="Excluir este item?">
+                        <ConfirmSubmit
+                          className="btn btn-danger btn-sm"
+                          message="Excluir este item?"
+                        >
                           Excluir
                         </ConfirmSubmit>
                       </form>
@@ -404,7 +531,11 @@ export default async function Page({ params, searchParams }: PageProps) {
                         detailsId={detailsId}
                         className="hidden"
                       >
-                        <input type="hidden" name="estimativaId" value={estimativaId} />
+                        <input
+                          type="hidden"
+                          name="estimativaId"
+                          value={estimativaId}
+                        />
                         <input type="hidden" name="id" value={it.id} />
                       </AutoCloseForm>
 
@@ -423,7 +554,6 @@ export default async function Page({ params, searchParams }: PageProps) {
               )}
             </tbody>
 
-            {/* ✅ rabinho (totais) */}
             {itens.length > 0 && (
               <tfoot>
                 <tr className="tfoot-row">
@@ -459,11 +589,22 @@ const baseStyles = `
   --accent:#2563eb; --ring:rgba(37,99,235,.25);
   --danger-bg:#fff1f2; --danger-text:#be123c;
 }
+.page{ max-width:1180px; margin-right:auto; margin-left:24px; padding:24px; display:grid; gap:16px; }
+.header{ display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+.head-left{ min-width:280px; }
+.title{ font-size:1.5rem; font-weight:600; color:var(--text); margin:0; }
+.subtitle{ font-size:.875rem; color:var(--subtext); margin-top:6px; }
+.subtitle-strong{ color:var(--text); }
+.alert{ border-radius:12px; padding:12px 16px; border:1px solid; }
+.alert-error{ background:#fff1f2; border-color:#fecdd3; color:#9f1239; }
+.alert-ok{ background:#ecfdf5; border-color:#a7f3d0; color:#065f46; }
+
 .card{ background:#fff; border:1px solid var(--border); border-radius:12px; padding:12px; box-shadow:0 1px 2px rgba(16,24,40,.04); }
 .card-head h2{ margin:0; font-size:.95rem; font-weight:600; color:var(--text); }
 .input{ height:36px; padding:0 10px; border:1px solid var(--border); border-radius:10px; outline:none; background:#fff; font-size:.95rem; }
 .input:focus{ border-color:var(--accent); box-shadow:0 0 0 3px var(--ring); }
 .input-sm{ height:30px; padding:0 8px; font-size:.9rem; }
+
 .btn{ display:inline-flex; align-items:center; justify-content:center; border:1px solid var(--border); border-radius:9999px; padding:0 12px; height:36px; font-weight:500; background:#f9fafb; color:var(--text); cursor:pointer; transition:.15s; font-size:.95rem; text-decoration:none; }
 .btn:hover{ background:#f3f4f6; }
 .btn-sm{ height:30px; padding:0 10px; font-size:.85rem; }
@@ -471,10 +612,29 @@ const baseStyles = `
 .btn-primary:hover{ background:var(--primary-hover); }
 .btn-danger{ background:var(--danger-bg); color:var(--danger-text); border-color:#fecdd3; }
 .btn-danger:hover{ background:#ffe4e6; }
+
 details>summary::-webkit-details-marker{ display:none; }
 details>summary{ list-style:none; }
-.pill{ display:inline-block; padding:5px 10px; border-radius:9999px; border:1px solid var(--border); background:var(--muted); color:var(--text); cursor:pointer; font-size:.85rem; }
+
+.pill{ display:inline-flex; align-items:center; padding:5px 10px; border-radius:9999px; border:1px solid var(--border); background:var(--muted); color:var(--text); cursor:pointer; font-size:.85rem; height:30px; }
 .pill:hover{ background:#eef2ff; border-color:#dfe3f1; }
+
+.actions-top{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.status-pill{ user-select:none; }
+
+.totais{ display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+.muted{ color:var(--subtext); font-size:.875rem; }
+.strong{ color:var(--text); font-weight:600; }
+.big{ font-size:1.5rem; font-weight:700; color:var(--text); }
+.mid{ font-size:1.05rem; font-weight:700; color:var(--text); }
+.mt8{ margin-top:8px; }
+
 .table-wrap{ overflow-x:auto; }
 .table{ border-collapse:collapse; width:100%; font-size:.95rem; }
 .table thead th{
@@ -508,5 +668,11 @@ tfoot .tfoot-value{
   font-weight:700;
   color:var(--text);
   white-space:nowrap;
+}
+
+/* ✅ mobile: header mais “stackado” */
+@media (max-width: 720px){
+  .page{ margin-left:12px; padding:16px; }
+  .actions-top{ justify-content:flex-start; }
 }
 `;
